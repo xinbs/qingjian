@@ -33,6 +33,23 @@ fn split_reasoning_and_legacy_think_tags_yield_only_the_json_answer() {
 }
 
 #[test]
+fn provider_service_tiers_do_not_prevent_parsing_the_answer() {
+    for tier in ["standard", "vendor-specific-tier"] {
+        let mut raw = response(Some(r#"{"ok":true}"#), "stop");
+        raw["service_tier"] = json!(tier);
+        assert_eq!(
+            response_content(&raw, Provider::MiniMax).unwrap(),
+            r#"{"ok":true}"#
+        );
+        raw["choices"][0]["finish_reason"] = json!("length");
+        assert!(matches!(
+            response_content(&raw, Provider::MiniMax),
+            Err(PredictError::BudgetExhausted)
+        ));
+    }
+}
+
+#[test]
 fn incomplete_and_invalid_replies_are_errors_instead_of_empty_successes() {
     assert!(matches!(
         response_content(
@@ -100,49 +117,61 @@ fn minimax_is_matched_by_host_and_preserves_larger_configured_timeouts() {
 }
 
 #[test]
-fn actual_http_request_splits_minimax_reasoning_and_reserves_its_budget() {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let config = PredictConfig {
-        base_url: format!("http://{}/v1", listener.local_addr().unwrap()),
-        ..PredictConfig::default()
-    };
-    let server = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut reader = BufReader::new(&stream);
-        let mut length = 0;
-        let mut first_line = String::new();
-        reader.read_line(&mut first_line).unwrap();
-        assert!(first_line.starts_with("POST /v1/chat/completions "));
-        loop {
-            let mut line = String::new();
-            reader.read_line(&mut line).unwrap();
-            if line == "\r\n" {
-                break;
+fn actual_http_request_uses_the_minimax_models_thinking_policy() {
+    for (model, expected_tokens, disabled) in [
+        ("MiniMax-M2.7-highspeed", 2080, false),
+        ("MiniMax-M3", 32, true),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let config = PredictConfig {
+            base_url: format!("http://{}/v1", listener.local_addr().unwrap()),
+            model: model.to_owned(),
+            ..PredictConfig::default()
+        };
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(&stream);
+            let mut length = 0;
+            let mut first_line = String::new();
+            reader.read_line(&mut first_line).unwrap();
+            assert!(first_line.starts_with("POST /v1/chat/completions "));
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    length = value.trim().parse::<usize>().unwrap();
+                }
             }
-            if let Some((name, value)) = line.split_once(':')
-                && name.eq_ignore_ascii_case("content-length")
-            {
-                length = value.trim().parse::<usize>().unwrap();
-            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            let body: Value = serde_json::from_slice(&body).unwrap();
+            let reply = response(Some(r#"{"ok":true}"#), "stop").to_string();
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", reply.len(), reply).unwrap();
+            body
+        });
+        let mut client = ChatClient::new(&config, "test-key".to_owned());
+        client.provider = Provider::MiniMax;
+        let reply = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(client.chat("test", "return JSON", 32))
+            .unwrap();
+        assert_eq!(reply, r#"{"ok":true}"#);
+        let body = server.join().unwrap();
+        assert_eq!(body["reasoning_split"], true);
+        assert_eq!(body["model"], model);
+        assert_eq!(body["max_tokens"], expected_tokens);
+        if disabled {
+            assert_eq!(body["thinking"]["type"], "disabled");
+        } else {
+            assert!(body.get("thinking").is_none());
         }
-        let mut body = vec![0; length];
-        reader.read_exact(&mut body).unwrap();
-        let body: Value = serde_json::from_slice(&body).unwrap();
-        let reply = response(Some(r#"{"ok":true}"#), "stop").to_string();
-        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", reply.len(), reply).unwrap();
-        body
-    });
-    let mut client = ChatClient::new(&config, "test-key".to_owned());
-    client.provider = Provider::MiniMax;
-    let reply = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(client.chat("test", "return JSON", 32))
-        .unwrap();
-    assert_eq!(reply, r#"{"ok":true}"#);
-    let body = server.join().unwrap();
-    assert_eq!(body["reasoning_split"], true);
-    assert_eq!(body["max_tokens"], 2080);
-    assert!(body.get("reasoning_effort").is_none());
+        assert!(body.get("reasoning_effort").is_none());
+    }
 }

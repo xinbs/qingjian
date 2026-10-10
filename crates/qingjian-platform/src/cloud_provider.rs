@@ -55,7 +55,7 @@ impl CloudProvider {
     pub fn model(self) -> Option<&'static str> {
         Some(match self {
             Self::DeepSeek => "deepseek-flash",
-            Self::MiniMax => "MiniMax-M2.7-highspeed",
+            Self::MiniMax => "MiniMax-M3",
             Self::OpenAi => "gpt-4.1-mini",
             Self::Zhipu => "glm-4.7-flash",
             Self::Kimi => "kimi-k2.6",

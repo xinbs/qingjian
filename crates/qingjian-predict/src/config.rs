@@ -40,7 +40,7 @@ pub struct PredictConfig {
 
     /// 推理强度，接口支持时随请求发 `reasoning_effort`：`none` 关掉模型的思考（联想要的是快，不是想），
     /// 其余 minimal / low / medium / high / xhigh 照传；留空则不发（给不认这个参数的接口）。
-    /// MiniMax M 系列无法用这个参数关思考，客户端会拆分思考与正文并额外留输出预算。
+    /// MiniMax-M3 的 none 转成 thinking.type=disabled；M2.x 无法关闭思考，额外留思考预算。
     pub reasoning_effort: String,
 }
 

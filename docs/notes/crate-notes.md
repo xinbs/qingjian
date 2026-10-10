@@ -96,10 +96,12 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 - 问字键（缺省 `u`）开头是问字模式（`PredictionKind::Question`，答案带读音、不校验拼音），`?` 开头要 `ModeKeys::question_mark` 开着才算（配置 `[shortcut] question_mark`，缺省关，壳用 `Engine::takes_question_mark` 决定空缓冲区的 `?` 是入口还是标点）；`PredictionKind::Translate` 是壳里快捷键触发的「翻译选中文字」
   （双向：汉字为主译成学习语言，外文译回中文，`prediction::translation_target`），译文走结果的 `sentence`。
 - `ChatClient` 按 URL 主机适配思考参数：智谱 / Kimi 的 `none` 转成 `thinking.type=disabled`，通义转成 `enable_thinking=false`；
-  官方 OpenAI 的 GPT-4 系列不发不支持的 `reasoning_effort`。MiniMax M 系列发 `reasoning_split=true`，不发 `reasoning_effort`，
-  在正文额度（联想 200、探活 32）之外加 2048 tokens 思考预算，实际请求至少等 15 秒；更大的 `timeout_ms` 照用。
+  官方 OpenAI 的 GPT-4 系列不发不支持的 `reasoning_effort`。MiniMax 发 `reasoning_split=true`，不发 `reasoning_effort`；
+  `MiniMax-M3` 在 `none` 时转成 `thinking.type=disabled`，只留正文额度（联想 200、探活 32），也是设置页预设模型。
+  M2.x 不能关闭思考，其余 MiniMax 请求在正文额度之外加 2048 tokens 思考预算；实际请求至少等 15 秒，更大的 `timeout_ms` 照用。
   `PredictConfig::request_timeout_ms` 是客户端与 macOS 候选轮询共用的有效超时，轮询兼顾前一条在飞的请求与防抖。
   MiniMax 旧式 `<think>…</think>` 只剥离正文开头完整的思考段；截断或非 JSON 正文报错，联想字段缺失 / 类型错误也不再记成空结果成功。
+  响应的 `service_tier` 是服务商计费信息，不参与正文解析，兼容 M3 返回的 `standard` 等 SDK 未知值。
   「测试连接」要求实际得到 `{"ok":true}`，仅有思考文字不会显示连接正常。
 
 ## crates/qingjian-format

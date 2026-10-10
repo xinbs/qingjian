@@ -68,12 +68,24 @@ impl Provider {
         };
         match self {
             Self::MiniMax => {
-                // reasoning_effort 不能关闭 M 系列思考；拆开正文才能按 JSON 解析。
+                // M2.x 不能关闭思考；只有明确支持关闭的 M3 使用 disabled。
+                let direct = fields.get("model").and_then(Value::as_str) == Some("MiniMax-M3")
+                    && matches!(effort, Some(ReasoningEffort::None));
                 fields.remove("reasoning_effort");
                 fields.insert("reasoning_split".to_owned(), Value::Bool(true));
+                if direct {
+                    fields.insert(
+                        "thinking".to_owned(),
+                        serde_json::json!({ "type": "disabled" }),
+                    );
+                }
                 fields.insert(
                     "max_tokens".to_owned(),
-                    Value::from(max_tokens.saturating_add(MINIMAX_REASONING_TOKENS)),
+                    Value::from(if direct {
+                        max_tokens
+                    } else {
+                        max_tokens.saturating_add(MINIMAX_REASONING_TOKENS)
+                    }),
                 );
             }
             Self::Zhipu | Self::Kimi if matches!(effort, Some(ReasoningEffort::None)) => {

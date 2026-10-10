@@ -111,7 +111,12 @@ impl ChatClient {
 
 /// 网络通了不代表正文可用：截断、思考文本和非 JSON 都要在进业务解析之前报错。
 fn response_content(raw: &serde_json::Value, provider: Provider) -> Result<String, PredictError> {
-    let response: CreateChatCompletionResponse = serde_json::from_value(raw.clone())?;
+    let mut answer = raw.clone();
+    // 服务商的计费层级不是正文协议（MiniMax-M3 返回 standard），不交给 SDK 的闭合枚举解析。
+    if let Some(fields) = answer.as_object_mut() {
+        fields.remove("service_tier");
+    }
+    let response: CreateChatCompletionResponse = serde_json::from_value(answer)?;
     let cut_off = response
         .choices
         .iter()

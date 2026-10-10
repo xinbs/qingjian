@@ -6,6 +6,39 @@ mod responses;
 use super::*;
 
 #[test]
+fn minimax_m3_disables_thinking_without_spending_a_reasoning_budget() {
+    for tokens in [32, 200] {
+        let mut body = serde_json::json!({
+            "model": "MiniMax-M3", "reasoning_effort": "none", "max_tokens": tokens
+        });
+        Provider::for_url("https://api.minimaxi.com/v1").prepare_request(
+            &mut body,
+            Some(&ReasoningEffort::None),
+            tokens,
+        );
+        assert_eq!(body["thinking"]["type"], "disabled");
+        assert_eq!(body["max_tokens"], tokens);
+        assert_eq!(body["reasoning_split"], true);
+        assert!(body.get("reasoning_effort").is_none());
+    }
+    for (model, effort) in [
+        ("MiniMax-M2.7-highspeed", Some(ReasoningEffort::None)),
+        ("MiniMax-M3.1-Flash-Preview", Some(ReasoningEffort::None)),
+        ("MiniMax-M3", Some(ReasoningEffort::High)),
+        ("MiniMax-M3", None),
+    ] {
+        let mut body = serde_json::json!({ "model": model, "max_tokens": 200 });
+        Provider::for_url("https://api.minimaxi.com/v1").prepare_request(
+            &mut body,
+            effort.as_ref(),
+            200,
+        );
+        assert!(body.get("thinking").is_none());
+        assert_eq!(body["max_tokens"], 2248);
+    }
+}
+
+#[test]
 fn reasoning_effort_parses_known_values_and_ignores_the_rest() {
     assert!(matches!(
         parse_reasoning_effort("none"),
