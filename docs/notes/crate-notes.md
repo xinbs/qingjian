@@ -260,6 +260,7 @@ IMK 输入法，源码按 `app / host / imk / candidates / menubar / preferences
   `reasoning_effort` 缺省 `none`，DeepSeek V4 默认思考，不关正文为空）；模糊音 `[fuzzy]` 默认都关；`[general]` 学习语言（`off` 不显示译文）/ 每页候选数 / 翻页键 / 外观 / 竖排横排 / 拼音显示位置 /
   英文模式候选开关（只控制 Caps Lock 英文模式；Shift 英文始终直通、不出候选）/ 中文优先 `chinese_first` / 中文模式英文词 `english_in_chinese`（`Engine::set_english_in_chinese`）/ emoji 候选 `emoji`（`Engine::set_emoji_candidates`）/ 双拼方案 `shuangpin`（小鹤 / 自然码 / 微软 / 搜狗 / 智能ABC / 小浪 / 首道，空为全拼）/ 日志级别 `log_level`（缺省 info 不含敲的内容，debug 逐键记，热切换）/ 输入日志 `input_log`；
   `[shortcut] switch_mode` 的 shift 项在通用页勾选，保存仅改 shift、保留其他平台的切换项；左右 Shift 单击切换中文与英文直通，组合键不切换，组句先原样上屏；中英状态跨应用共享，Caps Lock 状态变化按锁定状态重设并结束 Shift 直通；`[general] english_mode` 总开关也约束 macOS；
+  Shift 切换诊断在 info 日志记录修饰键事件的键码、标志、客户端是否存在、识别前后状态，以及会话激活 / 停用 / 提交时的控制器编号；取消待切换状态时另记一条。用于定位应用漏送事件或按下、松开之间重置会话，不记录普通按键和输入文本；
   `[shortcut]` 模式键 v / u、`question_mark`（缺省关，开了空缓冲区敲 `?` 进问字）、上屏第一 / 第二个译词的修饰键 `translation` / `translation_second`、删候选 `delete_candidate`（缺省 shift，用户词整删、词库词清学习）、翻译选中文字 `translate_selection`；
   `[apps] english_candidates_off` 按 bundle identifier 列出英文模式不给候选的应用（缺省终端 / 编辑器 / IDE，`*` 前缀匹配）；
   `[dictionaries] domains` 打开随包的领域词库（`Resources/dicts/` 11 本，缺省只开 `idioms`），`disabled` 关掉用户目录 `dicts/` 里的某本导入词库；

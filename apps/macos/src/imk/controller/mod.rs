@@ -59,6 +59,17 @@ define_class!(
         // define_class! 会把返回类型转成 ObjC BOOL，方法体里不能用 `return`，逻辑放在下面的 inherent impl
         #[unsafe(method(handleEvent:client:))]
         fn handle_event(&self, event: Option<&NSEvent>, client: Option<&AnyObject>) -> bool {
+            if let Some(event) = event
+                && event.r#type() == NSEventType::FlagsChanged
+            {
+                tracing::info!(
+                    controller = ?std::ptr::from_ref(self),
+                    key = event.keyCode(),
+                    flags = event.modifierFlags().bits(),
+                    client_present = client.is_some(),
+                    "收到修饰键事件"
+                );
+            }
             match (event, client) {
                 (Some(event), Some(client)) => {
                     let client = TextClient::new(client);
@@ -84,6 +95,7 @@ define_class!(
         /// 应用要求立刻结束本次输入（切换焦点、切换输入法等）。
         #[unsafe(method(commitComposition:))]
         fn commit_composition(&self, client: Option<&AnyObject>) {
+            tracing::info!(controller = ?std::ptr::from_ref(self), shift = ?self.ivars().get(), "commitComposition");
             self.ivars().set(ShiftTap::default());
             let client = client.map(TextClient::new);
             let done = catch_panic("commitComposition", || {
@@ -102,14 +114,14 @@ define_class!(
 
         #[unsafe(method(activateServer:))]
         fn activate_server(&self, sender: Option<&AnyObject>) {
+            tracing::info!(controller = ?std::ptr::from_ref(self), shift = ?self.ivars().get(), "activateServer");
             self.ivars().set(ShiftTap::default());
-            tracing::info!("activateServer");
             self.set_active();
             let done = catch_panic("activateServer", || {
                 // 用户要往 [apps] 里加应用时，从这条日志抄 bundle identifier
                 let bundle = sender.and_then(|s| TextClient::new(s).bundle_identifier());
                 if let Some(bundle) = &bundle {
-                    tracing::debug!(%bundle, "当前应用");
+                    tracing::info!(controller = ?std::ptr::from_ref(self), %bundle, "当前应用");
                 }
                 host::with(|h| {
                     h.engine.set_application(bundle);
@@ -140,8 +152,8 @@ define_class!(
 
         #[unsafe(method(deactivateServer:))]
         fn deactivate_server(&self, sender: Option<&AnyObject>) {
+            tracing::info!(controller = ?std::ptr::from_ref(self), shift = ?self.ivars().get(), "deactivateServer");
             self.ivars().set(ShiftTap::default());
-            tracing::info!("deactivateServer");
             self.clear_active();
             let client = sender.map(TextClient::new);
             let done = catch_panic("deactivateServer", || {
@@ -319,6 +331,9 @@ impl QingjianInputController {
 
     fn cancel_shift_tap(&self) {
         let mut tap = self.ivars().get();
+        if tap.is_pending() {
+            tracing::info!(controller = ?std::ptr::from_ref(self), shift = ?tap, "其他输入取消 Shift 单击");
+        }
         tap.cancel();
         self.ivars().set(tap);
     }
@@ -331,6 +346,7 @@ impl QingjianInputController {
         })
         .unwrap_or(false);
         let mut tap = self.ivars().get();
+        let before = tap;
         let toggle = tap.flags_changed(
             event.keyCode(),
             flags.contains(NSEventModifierFlags::Shift),
@@ -343,6 +359,17 @@ impl QingjianInputController {
             enabled,
         );
         self.ivars().set(tap);
+        // 仅记录修饰键与会话状态，不记录应用文本或普通按键内容。
+        tracing::info!(
+            controller = ?std::ptr::from_ref(self),
+            key = event.keyCode(),
+            flags = flags.bits(),
+            enabled,
+            before = ?before,
+            after = ?tap,
+            toggle,
+            "修饰键事件"
+        );
         if toggle {
             // 先结束旧模式的组句，不能把用户已敲的字母丢掉或当作新模式的输入。
             self.commit_raw(client);

@@ -10,6 +10,10 @@ pub struct ShiftTap {
 }
 
 impl ShiftTap {
+    pub fn is_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
     pub fn cancel(&mut self) {
         self.pending = None;
     }
