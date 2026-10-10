@@ -24,7 +24,7 @@ fn calculation_frame(candidate: Option<&Candidate>, mode: qingjian_render::Mode)
         calculation: true,
         rows: vec![row],
         highlighted: 0,
-        footer: Some("点击或 1 使用 · ↵ 原文".to_owned()),
+        footer: Some("点击或 1 取结果 · ↵ 完整等式 · 2 原式".to_owned()),
         mode,
         ..Frame::default()
     }
@@ -53,7 +53,7 @@ mod tests {
         assert!(frame.rows[0].index.is_empty());
         assert_eq!(query.candidates.items[0].kind, CandidateKind::Shortcut);
         assert!(!frame.is_empty());
-        assert!(frame.footer.as_deref().unwrap().contains("原文"));
+        assert!(frame.footer.as_deref().unwrap().contains("完整等式"));
     }
 
     #[test]

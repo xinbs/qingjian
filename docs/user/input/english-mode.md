@@ -59,7 +59,7 @@ macOS 在配置文件中设置 `[general] english_mode = false` 可关掉内置�
 
 以下候选行为适用于 Windows 英文模式与 macOS 的 Caps Lock 英文模式，且需开启英文候选。macOS 单击 Shift 切入的普通英文直通，不出英文词候选，也不学习个人英文词。
 
-macOS 的内置英文模式也支持[即时计算](shortcuts.md#输入算式直接计算macos)：输入 `1+1=`，旁边显示结果小框。点击或按 `1` 使用结果，`Enter` / `2` 保留原式，`Space` 保留原式并输入空格。Shift 英文、Caps Lock 英文以及关闭英文候选时均可使用；系统「ABC」输入法不属于青简的内置英文模式。
+macOS 的内置英文模式也支持[即时计算](shortcuts.md#输入算式直接计算macos)：输入 `1+1=`，旁边显示结果小框。点击或按 `1` 使用结果，`Enter` 输出完整等式（`1+1=2`），`2` 保留原式，`Space` 保留原式并输入空格。Shift 英文、Caps Lock 英文以及关闭英文候选时均可使用；系统「ABC」输入法不属于青简的内置英文模式。
 
 英文候选模式下输入字母时，候选窗口给出英文词的补全与拼写纠正：`recieve` → receive，`seperate` → separate。
 字母缺省小写，按住 `Shift` 输出大写。

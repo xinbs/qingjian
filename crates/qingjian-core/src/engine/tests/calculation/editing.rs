@@ -1,6 +1,6 @@
-//! 即时算式候选与按键分派回归：数字原文、等号触发、错误处理和完整上屏。
+//! 即时算式的数字入口、求值、编辑与错误处理回归。
 
-use super::{CountingLearner, EchoPredictor, engine};
+use super::super::{CountingLearner, EchoPredictor, engine};
 use crate::candidate::CandidateKind;
 use crate::engine::Learner;
 use std::cell::RefCell;
@@ -122,80 +122,4 @@ fn excessive_calculation_input_does_not_accept_more_keys() {
     assert!(!engine.calculation_accepts('+'));
     engine.set_input(&format!("1+{}1{}=", "(".repeat(40), ")".repeat(40)));
     assert!(engine.query().unwrap().candidates.items.is_empty());
-}
-
-#[test]
-fn english_calculations_offer_result_and_preserve_original_expression() {
-    let mut engine = engine();
-    engine.set_english_mode(true);
-    for c in "1+1=".chars() {
-        assert!(engine.calculation_accepts(c));
-        engine.push(c);
-    }
-    let query = engine.query().unwrap();
-    assert_eq!(query.marked_text(), "1+1=");
-    assert_eq!(
-        query
-            .candidates
-            .items
-            .iter()
-            .map(|c| c.text.as_str())
-            .collect::<Vec<_>>(),
-        ["2"]
-    );
-    assert!(
-        query
-            .candidates
-            .items
-            .iter()
-            .all(|c| c.kind == CandidateKind::Shortcut)
-    );
-    assert_eq!(engine.take_raw(), "1+1=");
-    assert!(engine.composition().is_empty());
-    engine.set_input("1+1=");
-    assert_eq!(
-        engine.commit(&engine.query().unwrap().candidates.items[0]),
-        "2"
-    );
-    assert!(engine.composition().is_empty());
-}
-
-#[test]
-fn english_calculation_overrides_english_candidates_and_zhuyin_keys() {
-    let mut engine = engine();
-    engine.set_zhuyin_mode(true);
-    engine.set_english_mode(true);
-    assert!(engine.calculation_accepts('2'));
-    engine.set_input("2X3=");
-    let query = engine.query().unwrap();
-    assert_eq!(query.candidates.items[0].text, "6");
-    engine.move_cursor_left();
-    engine.move_cursor_left();
-    assert_eq!(engine.take_raw(), "2X3=");
-    assert!(engine.composition().is_empty());
-    engine.set_input("123");
-    assert!(engine.query().unwrap().candidates.items.is_empty());
-    assert_eq!(engine.take_raw(), "123");
-}
-
-#[test]
-fn english_calculations_do_not_request_cloud_or_learn_words() {
-    let submitted = Rc::new(RefCell::new(Vec::new()));
-    let mut engine = engine()
-        .with_learner(Box::new(CountingLearner(HashMap::new())))
-        .with_predictor(Box::new(EchoPredictor {
-            submitted: submitted.clone(),
-            replies: Vec::new(),
-            sentence: true,
-        }));
-    engine.set_english_mode(true);
-    engine.set_input("2*(3+4)=");
-    let query = engine.query().unwrap();
-    assert_eq!(
-        engine.request_prediction(None, &query.candidates.items),
-        None
-    );
-    assert!(submitted.borrow().is_empty());
-    assert_eq!(engine.commit(&query.candidates.items[0]), "14");
-    assert_eq!(engine.learner.weight("14"), 0);
 }

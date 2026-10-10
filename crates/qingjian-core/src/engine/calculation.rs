@@ -29,6 +29,23 @@ impl Engine {
         (!self.zhuyin || self.english_mode) && calculator::is_calculation(self.composition.text())
     }
 
+    /// 回车提交完整等式；无可用结果时保持输入，让平台按原文上屏。
+    pub fn commit_calculation_with_expression(&mut self) -> Option<String> {
+        if !self.is_calculating() {
+            return None;
+        }
+        let result = calculator::result(self.composition.text())?;
+        let candidate = Candidate {
+            text: format!("{}{result}", self.raw_preedit().text),
+            kind: CandidateKind::Shortcut,
+            syllables: Vec::new(),
+            reading: None,
+            translation: None,
+            aux_code: None,
+        };
+        Some(self.commit(&candidate))
+    }
+
     pub(super) fn query_calculation(&self, start: Instant) -> Query {
         let text = self.composition.text();
         let items = calculator::result(text)

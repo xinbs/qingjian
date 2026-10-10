@@ -1,8 +1,21 @@
 //! 上屏：高亮候选、指定候选、拼音原样。
 
-use super::*;
+use super::QingjianInputController;
+use crate::host;
+use crate::imk::TextClient;
 
 impl QingjianInputController {
+    /// 回车输出完整等式；无计算结果时由调用方保留原文。
+    pub(super) fn commit_equation(&self, client: TextClient<'_>) -> bool {
+        let Some(text) = host::with(|h| h.engine.commit_calculation_with_expression()).flatten()
+        else {
+            return false;
+        };
+        client.insert_text(&text);
+        self.refresh(client);
+        true
+    }
+
     pub(super) fn commit_highlighted(&self, client: TextClient<'_>) -> bool {
         let index = host::with(|h| h.session.highlighted).unwrap_or(0);
         self.commit_index(index, client)
