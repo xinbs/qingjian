@@ -34,16 +34,20 @@ impl ShiftTap {
             }
         };
         let was_down = self.pressed & bit != 0;
-        if shift && !was_down {
+        if shift && was_down {
+            // 某些应用（如 Codex）重复投递按下事件，不能把“仍按着”误当松开。
+            // 已被打字或组合键取消的单击也不能因重复事件重新启用。
+            if other_modifiers || !enabled {
+                self.cancel();
+            }
+            false
+        } else if shift {
             let alone = self.pressed == 0;
             self.pressed |= bit;
             self.pending = (alone && !other_modifiers && enabled).then_some(key);
             false
         } else {
-            self.pressed &= !bit;
-            if !shift {
-                self.pressed = 0;
-            }
+            self.pressed = 0;
             let tap = self.pending.take() == Some(key);
             tap && was_down && !shift && !other_modifiers && enabled
         }
@@ -62,6 +66,35 @@ mod tests {
             assert!(tap.flags_changed(key, false, false, true));
             assert!(!tap.flags_changed(key, false, false, true));
         }
+    }
+
+    #[test]
+    fn repeated_press_and_release_events_toggle_once_per_tap() {
+        for key in [56, 60] {
+            let mut tap = ShiftTap::default();
+            let mut english = false;
+            // Codex 的同一次按下与松开各投递两遍；连续单击要能来回切换。
+            for expected in [true, false, true, false] {
+                let mut toggles = 0;
+                for shift in [true, true, false, false] {
+                    if tap.flags_changed(key, shift, false, true) {
+                        english = !english;
+                        toggles += 1;
+                    }
+                }
+                assert_eq!(toggles, 1);
+                assert_eq!(english, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_press_does_not_rearm_a_cancelled_tap() {
+        let mut tap = ShiftTap::default();
+        tap.flags_changed(56, true, false, true);
+        tap.cancel();
+        assert!(!tap.flags_changed(56, true, false, true));
+        assert!(!tap.flags_changed(56, false, false, true));
     }
 
     #[test]
