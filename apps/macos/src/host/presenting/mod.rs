@@ -6,8 +6,13 @@ mod translation_job;
 pub(super) use notice::Notice;
 pub use translation_job::TranslationJob;
 
+use super::Host;
 use super::cloud::cloud_candidate;
-use super::*;
+use crate::candidates::{Frame, Preedit, Row};
+use objc2::MainThreadMarker;
+use objc2_foundation::NSRect;
+use qingjian_core::{Candidate, CandidateKind, Cell};
+use qingjian_platform::LayoutMode;
 
 impl Host {
     /// 删掉当前页第 `offset` 格的候选：用户词整个删、词库词清学习。返回给用户看的一句话；那格没有候选返回 `None`。
@@ -151,10 +156,10 @@ impl Host {
         self.window.show(frame, self.anchor);
     }
 
-    /// 给候选窗口主题显示的输入状态：中英看 Caps Lock（与菜单栏一致），其余看配置；英文模式标点是半角。
+    /// 给候选窗口主题显示的输入状态：中英与菜单栏一致，其余看配置；英文模式标点是半角。
     fn input_mode(&self) -> qingjian_render::Mode {
         let general = &self.settings.config().general;
-        let english = crate::imk::modifiers::caps_lock_on();
+        let english = crate::imk::modifiers::english_mode();
         qingjian_render::Mode {
             english,
             traditional: general.traditional,

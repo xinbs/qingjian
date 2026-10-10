@@ -59,7 +59,7 @@ pub struct Ivars {
     /// 动画定时器：位图渲染器说有动画在播时跳。
     animation: RefCell<AnimationTimer>,
 
-    /// 点中候选或译词时交给谁（host 注册）。
+    /// 鼠标按下交给谁（host 注册），包含没有点中候选的点击。
     on_click: RefCell<Option<ClickHandler>>,
 }
 

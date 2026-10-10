@@ -1,4 +1,4 @@
-//! 「通用」页：学习语言、每页候选数、输入方案、英文模式候选。
+//! 「通用」页：学习语言、每页候选数、输入方案、中英切换、英文模式候选。
 
 use objc2::MainThreadMarker;
 use objc2::rc::Retained;
@@ -33,6 +33,9 @@ pub struct GeneralPage {
 
     /// 候选后面配 emoji。
     emoji: Retained<NSButton>,
+
+    /// 单击 Shift 切换中英文。
+    shift_switch: Retained<NSButton>,
 
     /// 英文模式也给候选。
     english: Retained<NSButton>,
@@ -152,9 +155,16 @@ impl GeneralPage {
         row_checkbox(layout, &traditional);
         let emoji = checkbox(mtm, "候选后面显示 emoji", Setting::Emoji, target);
         row_checkbox(layout, &emoji);
+        let shift_switch = checkbox(mtm, "单击 Shift 切换中英文", Setting::ShiftSwitch, target);
+        row_checkbox(layout, &shift_switch);
+        note(
+            layout,
+            mtm,
+            "左右 Shift 单独按下再松开时切换；按住 Shift 打字或用组合键不会切换。切到英文后字母、数字与半角标点直接输入，不出候选。组句中切换先把已敲内容原样上屏；中英状态在不同应用间保持。",
+        );
         let english = checkbox(
             mtm,
-            "英文模式（Caps Lock）也给候选",
+            "Caps Lock 英文模式也给候选",
             Setting::EnglishCandidates,
             target,
         );
@@ -162,7 +172,7 @@ impl GeneralPage {
         note(
             layout,
             mtm,
-            "Tab 或方向键选词；空格、回车、标点仍原样上屏敲的字母，不选词时与直接打字一样。",
+            "Caps Lock 切入英文时可显示候选；单击 Shift 切入英文始终直接输入，不受此项影响。Tab 或方向键选词；空格、回车、标点仍原样上屏敲的字母。",
         );
         let english_off_in_apps = checkbox(
             mtm,
@@ -220,6 +230,7 @@ impl GeneralPage {
             shuangpin_raw_preedit,
             traditional,
             emoji,
+            shift_switch,
             english,
             english_off_in_apps,
             english_in_chinese,
@@ -264,6 +275,8 @@ impl GeneralPage {
             .setEnabled(general.scheme().is_shuangpin());
         set_checked(&self.traditional, general.traditional);
         set_checked(&self.emoji, general.emoji);
+        set_checked(&self.shift_switch, config.shortcut.switch_mode.shift);
+        self.shift_switch.setEnabled(general.english_mode);
         set_checked(&self.english, general.english_candidates);
         set_checked(
             &self.english_off_in_apps,

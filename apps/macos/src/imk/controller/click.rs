@@ -4,10 +4,14 @@
 
 use std::cell::RefCell;
 
-use objc2::Message;
+use objc2::rc::Retained;
+use objc2::runtime::AnyObject;
+use objc2::{Message, msg_send};
 use qingjian_render::HitTarget;
 
-use super::*;
+use super::QingjianInputController;
+use crate::host;
+use crate::imk::{TextClient, catch_panic, recover_from_panic};
 
 thread_local! {
     /// 最近激活的会话；`deactivateServer:` 时清掉。
@@ -15,9 +19,13 @@ thread_local! {
 }
 
 /// 候选窗口的点击回调（host 建窗口时注册）。
-pub fn click(target: HitTarget) {
+pub fn click(target: Option<HitTarget>) {
     let Some(controller) = ACTIVE.with(|active| active.borrow().clone()) else {
         tracing::debug!("没有激活的会话，点击不处理");
+        return;
+    };
+    controller.cancel_shift_tap();
+    let Some(target) = target else {
         return;
     };
     if catch_panic("click", || controller.click(target)).is_none() {

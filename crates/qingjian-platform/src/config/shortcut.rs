@@ -1,3 +1,5 @@
+//! 快捷键配置：前缀模式键、平台修饰键与中英切换键。
+
 use qingjian_core::ModeKeys;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +15,7 @@ pub struct ShortcutConfig {
     #[serde(flatten)]
     pub mode: ModeKeys,
 
-    /// 中 / 英切换键（Windows 用），可多选：`["shift", "control", "ctrl+alt+space"]`。详见 [`SwitchKeys`]。
+    /// 中 / 英切换键，macOS 支持单击 Shift，Windows 可多选：`["shift", "control", "ctrl+alt+space"]`。详见 [`SwitchKeys`]。
     pub switch_mode: SwitchKeys,
 
     /// 数字键配这些修饰键：上屏候选的第一个译词。

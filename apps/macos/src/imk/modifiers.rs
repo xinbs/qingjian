@@ -1,6 +1,38 @@
-//! 当前修饰键状态。IMK 的 `inputText:client:` 不带事件对象，Caps Lock / Shift 只能从系统当前状态读。
+//! 当前修饰键与中英模式：模式在进程内共用，切换应用不重置 Shift 切出的直通英文。
 
 use objc2_app_kit::{NSEvent, NSEventModifierFlags};
+use std::cell::RefCell;
+
+use super::input_mode::InputMode;
+
+thread_local! {
+    static MODE: RefCell<InputMode> = RefCell::new(InputMode::default());
+}
+
+pub fn set_english_enabled(enabled: bool) {
+    let caps = caps_lock_on();
+    MODE.with(|mode| mode.borrow_mut().set_enabled(enabled, caps));
+}
+
+/// Caps Lock 改变时同步模式；读取不会重置 Shift 的选择。
+pub fn english_mode() -> bool {
+    let caps = caps_lock_on();
+    MODE.with(|mode| {
+        let mut mode = mode.borrow_mut();
+        mode.observe_caps(caps);
+        mode.english()
+    })
+}
+
+pub fn direct_english() -> bool {
+    english_mode();
+    MODE.with(|mode| mode.borrow().direct())
+}
+
+pub fn toggle_english_mode() -> bool {
+    let caps = caps_lock_on();
+    MODE.with(|mode| mode.borrow_mut().toggle(caps))
+}
 
 /// Caps Lock 亮着：视为英文模式，字母默认小写、按住 Shift 才大写、标点不转全角。
 pub fn caps_lock_on() -> bool {

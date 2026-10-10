@@ -5,6 +5,7 @@
 
 mod client;
 mod controller;
+mod input_mode;
 pub mod modifiers;
 pub mod secure_input;
 

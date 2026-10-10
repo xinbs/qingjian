@@ -10,7 +10,7 @@ use qingjian_core::{FuzzyRules, ModeKeys};
 use qingjian_platform::{
     Appearance, CandidateRenderer, CloudProvider, DEFAULT_ENGLISH_CANDIDATES_OFF, FontSize,
     KeyCombo, LEARNING_LANGUAGE_OFF, LayoutMode, LogLevel, Modifiers, PAGE_KEY_OPTIONS,
-    PreeditMode, Scheme, ShiftLetter, ShortcutConfig, UpdateChannel,
+    PreeditMode, Scheme, ShiftLetter, ShortcutConfig, SwitchKey, UpdateChannel,
 };
 
 impl Host {
@@ -422,6 +422,11 @@ impl Host {
             }
             (Setting::Emoji, SettingValue::Bool(on)) => {
                 self.settings.set_bool("general", "emoji", on);
+            }
+            (Setting::ShiftSwitch, SettingValue::Bool(on)) => {
+                let keys = config.shortcut.switch_mode.with(SwitchKey::Shift, on);
+                let values: toml_edit::Array = keys.config_values().into_iter().collect();
+                self.settings.set_value("shortcut", "switch_mode", values);
             }
             (Setting::ShiftLetter, SettingValue::Bool(on)) => {
                 let mode = if on {

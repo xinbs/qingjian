@@ -5,15 +5,15 @@
 
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyObject, Sel};
-use objc2::{define_class, msg_send, sel};
-use objc2_app_kit::{NSEvent, NSEventModifierFlags, NSEventType, NSMenu};
+use objc2::{DefinedClass, define_class, msg_send, sel};
+use std::cell::Cell;
+
+use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSMenu};
 use objc2_foundation::NSObjectProtocol;
 use objc2_input_method_kit::{IMKInputController, IMKServer};
-use qingjian_core::{Candidate, QUESTION_PREFIX};
 use qingjian_platform::Modifiers;
 
 use super::{TextClient, catch_panic, modifiers, recover_from_panic, secure_input};
-use crate::candidates::Preedit;
 use crate::host;
 use crate::menubar;
 
@@ -21,10 +21,12 @@ mod click;
 mod command;
 mod commit;
 mod display;
+mod shift_tap;
 mod text;
 mod translate;
 
 pub use click::click;
+use shift_tap::ShiftTap;
 
 define_class!(
     // SAFETY:
@@ -33,7 +35,7 @@ define_class!(
     #[unsafe(super(IMKInputController))]
     // 名字要和 Info.plist 的 InputMethodServerControllerClass 一致
     #[name = "QingjianInputController"]
-    #[ivars = ()]
+    #[ivars = Cell<ShiftTap>]
     pub struct QingjianInputController;
 
     impl QingjianInputController {
@@ -46,7 +48,7 @@ define_class!(
             client: Option<&AnyObject>,
         ) -> Option<Retained<Self>> {
             tracing::info!("新建输入会话");
-            let this = this.set_ivars(());
+            let this = this.set_ivars(Cell::default());
             unsafe { msg_send![super(this), initWithServer: server, delegate: delegate, client: client] }
         }
 
@@ -71,9 +73,18 @@ define_class!(
             }
         }
 
+        /// 额外订阅修饰键变化。扩展掩码后 IMK 不再替我们处理鼠标结束组句，因此也订阅鼠标按下。
+        #[unsafe(method(recognizedEvents:))]
+        fn recognized_events(&self, _sender: Option<&AnyObject>) -> usize {
+            (NSEventMask::KeyDown | NSEventMask::FlagsChanged
+                | NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown
+                | NSEventMask::OtherMouseDown).bits() as usize
+        }
+
         /// 应用要求立刻结束本次输入（切换焦点、切换输入法等）。
         #[unsafe(method(commitComposition:))]
         fn commit_composition(&self, client: Option<&AnyObject>) {
+            self.ivars().set(ShiftTap::default());
             let client = client.map(TextClient::new);
             let done = catch_panic("commitComposition", || {
                 if let Some(client) = client {
@@ -91,6 +102,7 @@ define_class!(
 
         #[unsafe(method(activateServer:))]
         fn activate_server(&self, sender: Option<&AnyObject>) {
+            self.ivars().set(ShiftTap::default());
             tracing::info!("activateServer");
             self.set_active();
             let done = catch_panic("activateServer", || {
@@ -128,6 +140,7 @@ define_class!(
 
         #[unsafe(method(deactivateServer:))]
         fn deactivate_server(&self, sender: Option<&AnyObject>) {
+            self.ivars().set(ShiftTap::default());
             tracing::info!("deactivateServer");
             self.clear_active();
             let client = sender.map(TextClient::new);
@@ -196,9 +209,24 @@ impl QingjianInputController {
         host::with(|h| h.engine.application() == Some(LOGIN_WINDOW)).unwrap_or(false)
     }
 
-    /// 一个按键事件的分发：只管按下；Cmd / Ctrl 组合除 Cmd+左右外一律交给应用；命令键映射成选择器；其余按字符当文本。
+    /// 修饰键判断 Shift 单击；普通按下映射成命令或文本；鼠标按下结束组句后交给应用。
     fn dispatch_event(&self, event: &NSEvent, client: TextClient<'_>) -> bool {
-        if event.r#type() != NSEventType::KeyDown || self.in_login_window() {
+        if self.in_login_window() {
+            self.ivars().set(ShiftTap::default());
+            return false;
+        }
+        if event.r#type() == NSEventType::FlagsChanged {
+            return self.handle_modifiers(event, client);
+        }
+        self.cancel_shift_tap();
+        if matches!(
+            event.r#type(),
+            NSEventType::LeftMouseDown | NSEventType::RightMouseDown | NSEventType::OtherMouseDown
+        ) {
+            self.commit_raw(client);
+            return false;
+        }
+        if event.r#type() != NSEventType::KeyDown {
             return false;
         }
         let flags = event.modifierFlags();
@@ -287,5 +315,53 @@ impl QingjianInputController {
             Some(text) if !text.is_empty() => self.handle_text(&text.to_string(), client),
             _ => false,
         }
+    }
+
+    fn cancel_shift_tap(&self) {
+        let mut tap = self.ivars().get();
+        tap.cancel();
+        self.ivars().set(tap);
+    }
+
+    fn handle_modifiers(&self, event: &NSEvent, client: TextClient<'_>) -> bool {
+        let flags = event.modifierFlags();
+        let enabled = host::with(|h| {
+            let config = h.settings.config();
+            config.general.english_mode && config.shortcut.switch_mode.shift
+        })
+        .unwrap_or(false);
+        let mut tap = self.ivars().get();
+        let toggle = tap.flags_changed(
+            event.keyCode(),
+            flags.contains(NSEventModifierFlags::Shift),
+            flags.intersects(
+                NSEventModifierFlags::Command
+                    | NSEventModifierFlags::Control
+                    | NSEventModifierFlags::Option
+                    | NSEventModifierFlags::Function,
+            ),
+            enabled,
+        );
+        self.ivars().set(tap);
+        if toggle {
+            // 先结束旧模式的组句，不能把用户已敲的字母丢掉或当作新模式的输入。
+            self.commit_raw(client);
+            let english = modifiers::toggle_english_mode();
+            host::with(|h| {
+                h.end_translation();
+                h.clear_notice();
+                h.engine.set_english_mode(false);
+                h.engine.break_chain();
+                h.cancel_prediction();
+                h.reset_session(None, Vec::new());
+                h.window.hide();
+                h.indicator.update();
+            });
+            tracing::info!(english, "Shift 切换中英模式");
+        } else {
+            host::with(|h| h.indicator.update());
+        }
+        // flagsChanged 继续传给应用，保留修饰键本身的系统行为。
+        false
     }
 }

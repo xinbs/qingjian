@@ -1,13 +1,17 @@
 //! 可打印字符的处理：中英文模式、直输段、表达式与问字模式的分流。
 
-use super::*;
+use qingjian_core::QUESTION_PREFIX;
+
+use super::QingjianInputController;
+use crate::host;
+use crate::imk::{TextClient, modifiers};
 
 impl QingjianInputController {
     pub(super) fn handle_text(&self, text: &str, client: TextClient<'_>) -> bool {
         tracing::debug!(%text, "inputText");
         self.note_application(&client);
         let mut composing = host::with(|h| !h.engine.composition().is_empty()).unwrap_or(false);
-        let english = modifiers::caps_lock_on();
+        let english = modifiers::english_mode();
         // 终端、编辑器这类应用（`[apps] english_candidates_off`）里英文模式是纯直通
         let english_candidates = english
             && host::with(|h| h.english_candidates_in(client.bundle_identifier().as_deref()))
@@ -33,6 +37,23 @@ impl QingjianInputController {
         };
         let c = char::from(*byte);
         host::with(|h| h.indicator.update());
+        // Shift 切出的英文完整直通：不走候选、问字入口或标点转换，命令行读到原来的按键。
+        if modifiers::direct_english() {
+            if composing {
+                self.commit_raw(client);
+            }
+            host::with(|h| {
+                h.engine.set_english_mode(false);
+                h.engine.note_passthrough(c);
+            });
+            return false;
+        }
+        // Caps Lock 仍亮着但 Shift 已切回中文时，普通字母按小写参与拼音；Shift+字母仍是大写。
+        let c = if !english && modifiers::caps_lock_on() && !modifiers::shift_down() {
+            c.to_ascii_lowercase()
+        } else {
+            c
+        };
         // 缓冲区为空时敲 ? 先进问字模式（配置 `[shortcut] question_mark`，缺省关），中英文模式都行：
         // 后面跟字母就是在问字，跟别的键就还原成问号
         if !composing
