@@ -9,6 +9,48 @@ fn template_parses_to_defaults() {
 }
 
 #[test]
+fn related_connection_fields_are_saved_together() {
+    let path = std::env::temp_dir().join(format!(
+        "qingjian-config-connection-fields-{}.toml",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    Config::write_template_if_missing(&path).unwrap();
+    Config::set_values(
+        &path,
+        "predict",
+        &[
+            ("base_url", "https://api.minimaxi.com/v1".into()),
+            ("model", "MiniMax-M2.7-highspeed".into()),
+            ("api_key_env", "QINGJIAN_API_KEY_MINIMAX".into()),
+            ("api_key", "".into()),
+        ],
+    )
+    .unwrap();
+    let config = Config::load(&path).unwrap();
+    assert_eq!(config.predict.base_url, "https://api.minimaxi.com/v1");
+    assert_eq!(config.predict.api_key_env, "QINGJIAN_API_KEY_MINIMAX");
+    assert_eq!(config.predict.api_key.as_deref(), Some(""));
+    assert!(!config.predict.enabled);
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("# 云联想：")
+    );
+    std::fs::write(&path, "[predict\n").unwrap();
+    assert!(
+        Config::set_values(
+            &path,
+            "predict",
+            &[("base_url", "https://other.example".into())]
+        )
+        .is_err()
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "[predict\n");
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn partial_file_keeps_other_defaults() {
     let config: Config = toml::from_str("[predict]\nenabled = true\nlookback = 10\n").unwrap();
     assert!(config.predict.enabled);

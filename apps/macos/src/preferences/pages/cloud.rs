@@ -4,7 +4,7 @@ use objc2::MainThreadMarker;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSButton, NSPopUpButton, NSSecureTextField, NSTextField};
 use objc2_foundation::NSString;
-use qingjian_platform::Config;
+use qingjian_platform::{CloudProvider, Config};
 
 use crate::preferences::controls::{
     button, checkbox, note, row_checkbox, row_control, row_popup, secure_field, select,
@@ -26,6 +26,9 @@ pub struct CloudPage {
 
     /// 云端词槽位数（0–4）。
     slots: Retained<NSPopUpButton>,
+
+    /// 常用服务商预设；自定义保留用户填写的接口与模型。
+    provider: Retained<NSPopUpButton>,
 
     /// 接口地址。
     base_url: Retained<NSTextField>,
@@ -75,6 +78,18 @@ impl CloudPage {
             mtm,
             "云端词到了只补进第一页末尾这几格（比如 2 就是 8、9），前面的本地候选不动；没到就什么都不变，翻页后全是本地候选。",
         );
+        let provider_titles: Vec<String> = CloudProvider::ALL
+            .iter()
+            .map(|p| p.label().to_owned())
+            .collect();
+        let provider = row_popup(
+            layout,
+            mtm,
+            "服务商",
+            &provider_titles,
+            Setting::CloudProvider,
+            target,
+        );
         let base_url = text_field(mtm, Setting::BaseUrl, target);
         row_control(layout, mtm, "接口地址", &base_url);
         let model = text_field(mtm, Setting::Model, target);
@@ -84,7 +99,7 @@ impl CloudPage {
         note(
             layout,
             mtm,
-            "文本框按回车保存。密钥只保存在这台电脑上，不会随配置文件导出，也不显示已填的值。",
+            "选服务商会填入地址与默认模型，仍可手动修改。文本框按回车或离开时保存。每个服务商单独保存密钥，切换后未设置密钥时请重新填写。",
         );
         let test = button(mtm, "测试连接", Setting::TestCloud, target);
         layout.place(&test, PAGE_PADDING, 120.0, ROW_HEIGHT + 4.0);
@@ -98,6 +113,7 @@ impl CloudPage {
             local_model,
             enabled,
             slots,
+            provider,
             base_url,
             model,
             api_key,
@@ -106,18 +122,21 @@ impl CloudPage {
     }
 
     /// `key_present` 是密钥已经有了（环境或配置里）；密钥框永远不回显值，只换占位文字。
-    /// `model_present` 是包里或用户目录里有模型文件，没有就把本地模型的勾选灰掉；云联想关着时它下面的项全灰。
+    /// `model_present` 是包里或用户目录里有模型文件，没有就把本地模型的勾选灰掉；连接配置在云联想关闭时仍可填写。
     pub fn sync(&self, config: &Config, key_present: bool, model_present: bool) {
         set_checked(&self.local_model, config.model.enabled && model_present);
         self.local_model.setEnabled(model_present);
         set_checked(&self.enabled, config.predict.enabled);
         let cloud = config.predict.enabled;
         self.slots.setEnabled(cloud);
-        self.base_url.setEnabled(cloud);
-        self.model.setEnabled(cloud);
-        self.api_key.setEnabled(cloud);
-        self.test.setEnabled(cloud);
+        self.test.setEnabled(key_present);
         select(&self.slots, Some(config.predict.slots.min(MAX_CLOUD_SLOTS)));
+        let provider =
+            CloudProvider::selected(&config.predict.base_url, &config.predict.api_key_env);
+        select(
+            &self.provider,
+            CloudProvider::ALL.iter().position(|p| *p == provider),
+        );
         self.base_url
             .setStringValue(&NSString::from_str(&config.predict.base_url));
         self.model

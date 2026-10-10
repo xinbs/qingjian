@@ -65,9 +65,39 @@ fn run(client: &ChatClient, model: String) -> Result<ConnectionReport, PredictEr
         .build()?;
     let started = Instant::now();
     let reply = runtime.block_on(client.chat(SYSTEM_PROMPT, USER_PROMPT, MAX_TOKENS))?;
+    validate_reply(&reply)?;
     Ok(ConnectionReport {
         model,
         elapsed: started.elapsed(),
         reply: reply.trim().to_owned(),
     })
+}
+
+fn validate_reply(reply: &str) -> Result<(), PredictError> {
+    let json: serde_json::Value = serde_json::from_str(reply)
+        .map_err(|_| PredictError::InvalidReply("connection test expected {\"ok\": true}"))?;
+    if json.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Err(PredictError::InvalidReply(
+            "connection test expected {\"ok\": true}",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_reply;
+
+    #[test]
+    fn connection_test_requires_the_requested_answer() {
+        assert!(validate_reply(r#"{"ok": true}"#).is_ok());
+        for reply in [
+            r#"{"ok": false}"#,
+            r#"{"ok": "true"}"#,
+            "{}",
+            "<think>only reasoning</think>",
+        ] {
+            assert!(validate_reply(reply).is_err());
+        }
+    }
 }

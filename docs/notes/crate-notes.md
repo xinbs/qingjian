@@ -95,6 +95,12 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
   （`user-glossary-<语言>.tsv`，`LayeredTranslator` 个人表优先）；随云联想开关一起开。
 - 问字键（缺省 `u`）开头是问字模式（`PredictionKind::Question`，答案带读音、不校验拼音），`?` 开头要 `ModeKeys::question_mark` 开着才算（配置 `[shortcut] question_mark`，缺省关，壳用 `Engine::takes_question_mark` 决定空缓冲区的 `?` 是入口还是标点）；`PredictionKind::Translate` 是壳里快捷键触发的「翻译选中文字」
   （双向：汉字为主译成学习语言，外文译回中文，`prediction::translation_target`），译文走结果的 `sentence`。
+- `ChatClient` 按 URL 主机适配思考参数：智谱 / Kimi 的 `none` 转成 `thinking.type=disabled`，通义转成 `enable_thinking=false`；
+  官方 OpenAI 的 GPT-4 系列不发不支持的 `reasoning_effort`。MiniMax M 系列发 `reasoning_split=true`，不发 `reasoning_effort`，
+  在正文额度（联想 200、探活 32）之外加 2048 tokens 思考预算，实际请求至少等 15 秒；更大的 `timeout_ms` 照用。
+  `PredictConfig::request_timeout_ms` 是客户端与 macOS 候选轮询共用的有效超时，轮询兼顾前一条在飞的请求与防抖。
+  MiniMax 旧式 `<think>…</think>` 只剥离正文开头完整的思考段；截断或非 JSON 正文报错，联想字段缺失 / 类型错误也不再记成空结果成功。
+  「测试连接」要求实际得到 `{"ok":true}`，仅有思考文字不会显示连接正常。
 
 ## crates/qingjian-format
 
@@ -163,6 +169,10 @@ P2C 自由生成实验：`--eval-text <集> --eval-generate data/models/hanzhang
 短语层不当 token 统计（分词时摘掉、统计完按成分合成一元 / 二元，短语得分等于原来两个词的路径，见 `bigram.rs` 模块注释），品牌词按给定次数写进一元与句首二元。
 
 ## crates/qingjian-platform
+
+`CloudProvider` 保存常用云服务的地址 / 默认模型 / 密钥环境变量分组，macOS 设置页选择后才写入，不在界面同步时覆盖手填值。
+`Config::set_values` 把地址、模型与密钥分组一次原子落盘；切换前保存旧分组密钥，新分组不回退到全局密钥。
+自定义接口按去首尾空白与末尾斜杠后的地址逐字节编码分组，旧 `.env` 条目保留。
 
 输入方案是**两条独立的轴**：`Scheme`（拼音侧：全拼 / 双拼七套 / 大千注音 / 关，`[general] scheme`）
 与 `[general] wubi`（形码侧：空为关 / `wubi86`）。两边都开就是**混输**（`GeneralConfig::mixed`）。

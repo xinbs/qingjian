@@ -1,9 +1,17 @@
 //! 菜单与偏好设置窗口的动作：只改 config.toml（或触发一次性操作），改完由 apply_config 统一生效。
 
+use super::Host;
 use super::diagnostics::{copy_to_pasteboard, open_with_system};
-use super::*;
+use crate::app::logging;
+use crate::menubar::MenuAction;
 use crate::preferences::DEFAULT_FONT_LABEL;
-use qingjian_platform::{FontSize, ShiftLetter};
+use crate::preferences::{Setting, SettingValue};
+use qingjian_core::{FuzzyRules, ModeKeys};
+use qingjian_platform::{
+    Appearance, CandidateRenderer, CloudProvider, DEFAULT_ENGLISH_CANDIDATES_OFF, FontSize,
+    KeyCombo, LEARNING_LANGUAGE_OFF, LayoutMode, LogLevel, Modifiers, PAGE_KEY_OPTIONS,
+    PreeditMode, Scheme, ShiftLetter, ShortcutConfig, UpdateChannel,
+};
 
 impl Host {
     /// 写短语前读取文件；外部规则有变化时同步列表并请用户重新确认。
@@ -361,6 +369,31 @@ impl Host {
             (Setting::CloudEnabled, SettingValue::Bool(on)) => {
                 self.settings.set_bool("predict", "enabled", on);
             }
+            (Setting::CloudProvider, SettingValue::Index(index)) => {
+                let Some(provider) = CloudProvider::ALL.get(index).copied() else {
+                    return;
+                };
+                let base_url = provider.base_url().unwrap_or(&config.predict.base_url);
+                let model = provider.model().unwrap_or(&config.predict.model);
+                let key_env = provider.key_env(base_url);
+                if self
+                    .settings
+                    .set_predict_connection(base_url, model, &key_env)
+                {
+                    self.apply_config(false);
+                    let message = if self.settings.config().predict.resolve_api_key().is_some() {
+                        "服务商已切换，可测试连接"
+                    } else {
+                        "服务商已切换，请填写此服务商的 API 密钥"
+                    };
+                    self.preferences.set_status(message);
+                } else {
+                    self.apply_config(false);
+                    self.preferences
+                        .set_status("服务商没有切换：配置或原密钥保存失败，详情见日志");
+                }
+                return;
+            }
             (Setting::LocalModelEnabled, SettingValue::Bool(on)) => {
                 self.settings.set_bool("model", "enabled", on);
             }
@@ -430,7 +463,34 @@ impl Host {
             (Setting::BaseUrl, SettingValue::Text(text)) => {
                 let text = text.trim();
                 if !text.is_empty() && text != config.predict.base_url {
-                    self.settings.set_value("predict", "base_url", text);
+                    let provider = if CloudProvider::selected(
+                        &config.predict.base_url,
+                        &config.predict.api_key_env,
+                    ) == CloudProvider::Custom
+                    {
+                        CloudProvider::Custom
+                    } else {
+                        CloudProvider::for_url(text)
+                    };
+                    let key_env = provider.key_env(text);
+                    if !self
+                        .settings
+                        .set_predict_connection(text, &config.predict.model, &key_env)
+                    {
+                        self.apply_config(false);
+                        self.preferences
+                            .set_status("接口地址没有保存：配置或原密钥保存失败，详情见日志");
+                    } else {
+                        self.apply_config(false);
+                        let message = if self.settings.config().predict.resolve_api_key().is_none()
+                        {
+                            "接口地址已保存，请填写此服务商的 API 密钥"
+                        } else {
+                            "接口地址已保存，可测试连接"
+                        };
+                        self.preferences.set_status(message);
+                    }
+                    return;
                 }
             }
             (Setting::Model, SettingValue::Text(text)) => {
@@ -451,11 +511,25 @@ impl Host {
                 if text.is_empty() {
                     return;
                 }
-                if self.settings.set_env_var(&config.predict.api_key_env, text) {
+                let provider =
+                    CloudProvider::selected(&config.predict.base_url, &config.predict.api_key_env);
+                let key_env = provider.key_env(&config.predict.base_url);
+                if !self.settings.set_predict_connection(
+                    &config.predict.base_url,
+                    &config.predict.model,
+                    &key_env,
+                ) {
+                    self.apply_config(false);
+                    self.preferences
+                        .set_status("密钥没有保存：原云服务设置保存失败，详情见日志");
+                    return;
+                }
+                if self.settings.set_env_var(&key_env, text) {
                     // 密钥换了必须重建 Predictor
                     self.apply_config(true);
                     self.preferences.set_status("密钥已保存");
                 } else {
+                    self.apply_config(false);
                     self.preferences
                         .set_status("密钥没有保存：写不进配置目录的 .env，详情见日志");
                 }

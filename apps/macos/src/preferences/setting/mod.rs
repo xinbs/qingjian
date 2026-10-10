@@ -56,6 +56,9 @@ pub enum Setting {
     /// `[predict] enabled`。
     CloudEnabled,
 
+    /// 云服务预设，选择时填入地址与默认模型，并切换独立的密钥分组。
+    CloudProvider,
+
     /// `[model] enabled`。
     LocalModelEnabled,
 
@@ -233,6 +236,7 @@ impl Setting {
             Self::QuestionKey => 6,
             Self::QuestionMark => 41,
             Self::CloudEnabled => 7,
+            Self::CloudProvider => 65,
             Self::BaseUrl => 8,
             Self::Model => 9,
             Self::ApiKey => 10,
@@ -308,6 +312,7 @@ impl Setting {
             6 => Self::QuestionKey,
             41 => Self::QuestionMark,
             7 => Self::CloudEnabled,
+            65 => Self::CloudProvider,
             8 => Self::BaseUrl,
             9 => Self::Model,
             10 => Self::ApiKey,
@@ -395,6 +400,7 @@ mod tests {
             Setting::ExpressionKey,
             Setting::QuestionKey,
             Setting::CloudEnabled,
+            Setting::CloudProvider,
             Setting::LocalModelEnabled,
             Setting::UpdateCheck,
             Setting::UpdateChannel,

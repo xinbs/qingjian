@@ -3,6 +3,8 @@
 use qingjian_core::{CloudWord, PredictionKind, PredictionRequest};
 use serde::{Deserialize, Serialize};
 
+use crate::error::PredictError;
+
 /// 系统提示。语言跟随上下文，不限定中文。
 pub const SYSTEM_PROMPT: &str = "\
 你是一个拼音输入法的云端联想引擎。用户正在打拼音，还没选词。你会收到一段 JSON：\
@@ -173,23 +175,31 @@ struct RawWord {
 }
 
 /// 解析模型回复：去空、去重、去换行，截到 `max_items`。不要与本地首选相同的词，也不要没给拼音的词。
-pub fn parse_reply(content: &str, request: &PredictionRequest) -> Reply {
-    let raw: RawReply = match serde_json::from_str(content.trim()) {
-        Ok(raw) => raw,
-        Err(_) => return Reply::default(),
+pub fn parse_reply(content: &str, request: &PredictionRequest) -> Result<Reply, PredictError> {
+    let json: serde_json::Value = serde_json::from_str(content.trim())
+        .map_err(|_| PredictError::InvalidReply("prediction expected a JSON object"))?;
+    let has_fields = match request.kind {
+        PredictionKind::Compose => json.get("words").is_some() || json.get("sentence").is_some(),
+        PredictionKind::Question => json.get("answers").is_some(),
+        PredictionKind::Translate => json.get("sentence").is_some(),
     };
+    if !has_fields {
+        return Err(PredictError::InvalidReply("prediction fields are missing"));
+    }
+    let raw: RawReply = serde_json::from_value(json)
+        .map_err(|_| PredictError::InvalidReply("prediction fields have invalid types"))?;
     if request.kind == PredictionKind::Question {
-        return parse_answers(raw.answers, request.max_items);
+        return Ok(parse_answers(raw.answers, request.max_items));
     }
     if request.kind == PredictionKind::Translate {
         // 译文保留换行（原文可能是多段），只去首尾空白
-        return Reply {
+        return Ok(Reply {
             words: Vec::new(),
             sentence: raw
                 .sentence
                 .map(|s| s.trim().to_owned())
                 .filter(|s| !s.is_empty()),
-        };
+        });
     }
     let mut reply = Reply::default();
     let mut seen: Vec<String> = Vec::new();
@@ -225,7 +235,7 @@ pub fn parse_reply(content: &str, request: &PredictionRequest) -> Reply {
             .map(|s| strip_before(&clean(&s), &request.before))
             .filter(|s| !s.is_empty() && Some(s.as_str()) != first_local);
     }
-    reply
+    Ok(reply)
 }
 
 /// 问字模式的答案：去空、去重，拼音只是显示用的读音，不校验。
@@ -276,6 +286,10 @@ fn clean(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse_reply(content: &str, request: &PredictionRequest) -> Reply {
+        super::parse_reply(content, request).unwrap()
+    }
 
     fn request(pinyin: &str, want_sentence: bool) -> PredictionRequest {
         PredictionRequest {
@@ -368,14 +382,12 @@ mod tests {
     }
 
     #[test]
-    fn garbage_replies_are_empty() {
-        assert_eq!(
-            parse_reply("not json", &request("k", false)),
-            Reply::default()
-        );
-        assert_eq!(
-            parse_reply(r#"{"foo": 1}"#, &request("zt", false)),
-            Reply::default()
+    fn invalid_replies_fail_while_valid_empty_replies_succeed() {
+        for content in ["not json", r#"{"foo": 1}"#, r#"{"words": "invalid"}"#] {
+            assert!(super::parse_reply(content, &request("zt", false)).is_err());
+        }
+        assert!(
+            parse_reply(r#"{"words": [], "sentence": null}"#, &request("zt", false)).is_empty()
         );
     }
 

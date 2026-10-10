@@ -64,7 +64,15 @@ impl Host {
     /// 已发出联想请求：清掉旧结果，开始轮询。
     pub fn await_prediction(&mut self) {
         self.sentence = None;
-        self.monitor.start();
+        let config = &self.settings.config().predict;
+        // 当前请求可能等前一条在飞的请求结束；后台随后会把队列压成最新一条。
+        let max_wait = config
+            .request_timeout_ms()
+            .saturating_mul(2)
+            .saturating_add(config.debounce_ms)
+            .saturating_add(1000);
+        self.monitor
+            .start(std::time::Duration::from_millis(max_wait));
     }
 
     /// 作废联想：不再轮询，丢掉已到的整句。
@@ -157,7 +165,10 @@ pub(super) fn describe_predict_error(error: &PredictError) -> String {
         }
         PredictError::EmptyReply => "接口通了但没有返回正文，检查模型名是否正确".to_owned(),
         PredictError::BudgetExhausted => {
-            "接口通了但正文是空的：模型开着思考，把输出额度用光了".to_owned()
+            "接口通了但回复被截断：模型思考或正文用完了输出额度".to_owned()
+        }
+        PredictError::InvalidReply(_) => {
+            "接口通了但回复格式不正确，没有得到可用的 JSON 正文".to_owned()
         }
         PredictError::Encode(error) => format!("请求编码失败：{error}"),
         PredictError::Runtime(error) => format!("起不了后台线程：{error}"),

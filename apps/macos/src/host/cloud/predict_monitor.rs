@@ -10,15 +10,15 @@ use objc2_foundation::{NSObject, NSObjectProtocol, NSTimer};
 /// 轮询间隔。
 const POLL_INTERVAL: f64 = 0.05;
 
-/// 最长轮询多久；请求本身有超时，这里只是兜底。
-const MAX_WAIT: Duration = Duration::from_secs(12);
-
 pub struct PredictMonitor {
     /// 定时器；没在等结果时为 `None`。
     timer: Option<Retained<NSTimer>>,
 
     /// 本轮开始等待的时间。
     since: Option<Instant>,
+
+    /// 与当前服务商的请求超时保持一致。
+    max_wait: Duration,
 
     mtm: MainThreadMarker,
 }
@@ -28,12 +28,14 @@ impl PredictMonitor {
         Self {
             timer: None,
             since: None,
+            max_wait: Duration::ZERO,
             mtm,
         }
     }
 
     /// 有请求在飞：开始（或继续）轮询。
-    pub fn start(&mut self) {
+    pub fn start(&mut self, max_wait: Duration) {
+        self.max_wait = max_wait;
         self.since = Some(Instant::now());
         if self.timer.is_some() {
             return;
@@ -60,7 +62,8 @@ impl PredictMonitor {
 
     /// 等太久了就放弃。
     pub fn expired(&self) -> bool {
-        self.since.is_some_and(|since| since.elapsed() > MAX_WAIT)
+        self.since
+            .is_some_and(|since| since.elapsed() > self.max_wait)
     }
 }
 

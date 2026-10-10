@@ -482,6 +482,15 @@ impl Config {
         key: &str,
         value: impl Into<toml_edit::Value>,
     ) -> Result<(), ConfigError> {
+        Self::set_values(path, section, &[(key, value.into())])
+    }
+
+    /// 同一分节的关联字段一次落盘，热加载不会读到服务地址与密钥分组不一致的中间状态。
+    pub fn set_values(
+        path: &Path,
+        section: &str,
+        values: &[(&str, toml_edit::Value)],
+    ) -> Result<(), ConfigError> {
         let source = match std::fs::read_to_string(path) {
             Ok(source) => source,
             Err(source) if source.kind() == std::io::ErrorKind::NotFound => TEMPLATE.to_owned(),
@@ -501,10 +510,15 @@ impl Config {
             document[section] = toml_edit::table();
         }
         // 旧写法（外观写在 theme 里）要在改键之前认出来：写的正是 theme 时，新值会把它盖掉
-        let legacy = (section == "general" && matches!(key, "appearance" | "theme"))
-            .then(|| legacy_appearance(&document))
-            .flatten();
-        document[section][key] = toml_edit::value(value);
+        let legacy = (section == "general"
+            && values
+                .iter()
+                .any(|(key, _)| matches!(*key, "appearance" | "theme")))
+        .then(|| legacy_appearance(&document))
+        .flatten();
+        for (key, value) in values {
+            document[section][key] = toml_edit::value(value.clone());
+        }
         if let Some(old) = legacy {
             migrate_legacy_theme(&mut document, old);
         }

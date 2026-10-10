@@ -20,7 +20,7 @@ pub struct PredictConfig {
     /// 存放密钥的环境变量名。
     pub api_key_env: String,
 
-    /// 单次请求超时（毫秒），超时即丢。
+    /// 单次请求超时（毫秒），超时即丢；MiniMax 思考接口至少等待 15 秒。
     pub timeout_ms: u64,
 
     /// 防抖：停止敲键多久之后才真正发请求（毫秒）。
@@ -38,9 +38,9 @@ pub struct PredictConfig {
     /// 组句中要不要整句补全。
     pub sentence: bool,
 
-    /// 推理强度，随请求发 `reasoning_effort`：`none` 关掉模型的思考（联想要的是快，不是想），
+    /// 推理强度，接口支持时随请求发 `reasoning_effort`：`none` 关掉模型的思考（联想要的是快，不是想），
     /// 其余 minimal / low / medium / high / xhigh 照传；留空则不发（给不认这个参数的接口）。
-    /// DeepSeek V4 这类默认带思考的模型不关会把 token 预算全花在思考上，正文为空。
+    /// MiniMax M 系列无法用这个参数关思考，客户端会拆分思考与正文并额外留输出预算。
     pub reasoning_effort: String,
 }
 
@@ -64,6 +64,11 @@ impl Default for PredictConfig {
 }
 
 impl PredictConfig {
+    /// 包含服务商最低等待时间的实际请求超时，客户端与平台轮询共用。
+    pub fn request_timeout_ms(&self) -> u64 {
+        crate::chat_client::provider::Provider::for_url(&self.base_url).timeout_ms(self.timeout_ms)
+    }
+
     /// 配置里的密钥优先，其次环境变量；两边都没有返回 `None`。
     pub fn resolve_api_key(&self) -> Option<String> {
         self.api_key

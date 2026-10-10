@@ -17,9 +17,12 @@ pub enum PredictError {
     #[error("API returned no usable content")]
     EmptyReply,
 
-    /// 正文为空且回复因长度截断：模型开着思考，输出额度花在思考上了。
-    #[error("API reply was cut off before any content (output budget spent on reasoning)")]
+    /// 输出额度耗尽，可能只有思考或不完整的 JSON。
+    #[error("API reply was cut off (output token budget exhausted)")]
     BudgetExhausted,
+
+    #[error("API returned invalid content: {0}")]
+    InvalidReply(&'static str),
 
     #[error("failed to encode request: {0}")]
     Encode(#[from] serde_json::Error),

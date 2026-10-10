@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use qingjian_platform::Config;
+use qingjian_platform::{CloudProvider, Config};
 
 use super::paths;
 
@@ -141,6 +141,47 @@ impl Settings {
         true
     }
 
+    /// 换服务之前保存原来的密钥，新服务只读取自己的分组，不回退到全局密钥。
+    pub fn set_predict_connection(&mut self, base_url: &str, model: &str, key_env: &str) -> bool {
+        let Some(path) = self.path.clone() else {
+            tracing::warn!("没有配置文件路径，云服务设置不落盘");
+            return false;
+        };
+        let previous = &self.config.predict;
+        let previous_env = CloudProvider::selected(&previous.base_url, &previous.api_key_env)
+            .key_env(&previous.base_url);
+        if let Some(key) = previous.resolve_api_key() {
+            // 原配置中的明文密钥也要保存到旧分组，才能安全清空当前连接的明文覆盖项。
+            if (previous
+                .api_key
+                .as_deref()
+                .is_some_and(|key| !key.trim().is_empty())
+                || previous.api_key_env != previous_env)
+                && !self.set_env_var(&previous_env, &key)
+            {
+                return false;
+            }
+            let same_address = previous.base_url.trim().trim_end_matches('/')
+                == base_url.trim().trim_end_matches('/');
+            if same_address && key_env != previous_env && !self.set_env_var(key_env, &key) {
+                return false;
+            }
+        }
+        let values = [
+            ("base_url", toml_edit::Value::from(base_url)),
+            ("model", toml_edit::Value::from(model)),
+            ("api_key_env", toml_edit::Value::from(key_env)),
+            ("api_key", toml_edit::Value::from("")),
+        ];
+        if let Err(error) = Config::set_values(&path, "predict", &values) {
+            tracing::warn!(%error, "云服务设置没有保存");
+            return false;
+        }
+        tracing::info!(base_url, model, "云服务设置已改");
+        self.read(&path);
+        true
+    }
+
     fn read(&mut self, path: &Path) {
         match Config::load(path) {
             Ok(config) => {
@@ -184,4 +225,114 @@ fn modified_time(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path)
         .and_then(|meta| meta.modified())
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Settings;
+    use qingjian_platform::{CloudProvider, Config};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEST: AtomicU64 = AtomicU64::new(0);
+
+    fn write_test_config(path: &std::path::Path, config: &Config) {
+        Config::set_values(
+            path,
+            "predict",
+            &[
+                ("base_url", config.predict.base_url.as_str().into()),
+                (
+                    "api_key",
+                    config.predict.api_key.as_deref().unwrap_or("").into(),
+                ),
+                ("api_key_env", config.predict.api_key_env.as_str().into()),
+                ("slots", (config.predict.slots as i64).into()),
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn switching_connections_preserves_keys_without_transferring_them() {
+        let id = NEXT_TEST.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "qingjian-cloud-settings-{}-{id}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        let first_url = format!("https://first-{}-{id}.example/v1", std::process::id());
+        let second_url = format!("https://second-{}-{id}.example/v1", std::process::id());
+        let mut config = Config::default();
+        config.predict.base_url = first_url.clone();
+        let legacy_env = format!("QINGJIAN_TEST_LEGACY_KEY_{}_{id}", std::process::id());
+        config.predict.api_key_env = legacy_env.clone();
+        config.predict.slots = 3;
+        write_test_config(&path, &config);
+        let first_env = CloudProvider::Custom.key_env(&first_url);
+        let second_env = CloudProvider::Custom.key_env(&second_url);
+        let mut settings = Settings {
+            path: Some(path.clone()),
+            config,
+            modified: None,
+            error: None,
+        };
+        assert!(settings.set_env_var(&legacy_env, "old-test-token"));
+
+        assert!(settings.set_predict_connection(&second_url, "new-model", &second_env));
+        assert!(settings.config().predict.resolve_api_key().is_none());
+        assert!(!settings.config().predict.enabled);
+        assert_eq!(settings.config().predict.slots, 3);
+        assert!(
+            std::fs::read_to_string(dir.join(".env"))
+                .unwrap()
+                .contains(&first_env)
+        );
+        assert!(
+            std::fs::read_to_string(dir.join(".env"))
+                .unwrap()
+                .contains(&legacy_env)
+        );
+        assert!(settings.set_env_var(&second_env, "new-test-token"));
+
+        assert!(settings.set_predict_connection(&first_url, "first-model", &first_env));
+        assert_eq!(
+            settings.config().predict.resolve_api_key().as_deref(),
+            Some("old-test-token")
+        );
+        assert_eq!(std::env::var(&second_env).unwrap(), "new-test-token");
+        let saved = Config::load(&path).unwrap();
+        assert_eq!(saved.predict.api_key.as_deref(), Some(""));
+        assert_eq!(saved.predict.api_key_env, first_env);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn saving_same_connection_migrates_legacy_inline_key() {
+        let id = NEXT_TEST.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("qingjian-cloud-legacy-{}-{id}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        let url = format!("https://legacy-{}-{id}.example/v1", std::process::id());
+        let mut config = Config::default();
+        config.predict.base_url = url.clone();
+        config.predict.api_key = Some("legacy-test-token".to_owned());
+        write_test_config(&path, &config);
+        let key_env = CloudProvider::Custom.key_env(&url);
+        let mut settings = Settings {
+            path: Some(path),
+            config,
+            modified: None,
+            error: None,
+        };
+
+        assert!(settings.set_predict_connection(&url, "chosen-model", &key_env));
+        assert_eq!(
+            settings.config().predict.resolve_api_key().as_deref(),
+            Some("legacy-test-token")
+        );
+        assert_eq!(settings.config().predict.model, "chosen-model");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
