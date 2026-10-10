@@ -114,6 +114,20 @@ fn minimax_is_matched_by_host_and_preserves_larger_configured_timeouts() {
         assert_eq!(Provider::for_url(url), Provider::OpenAi);
     }
     assert_eq!(PredictConfig::default().request_timeout_ms(), 5000);
+    let direct = PredictConfig {
+        base_url: "https://api.minimaxi.com/v1".to_owned(),
+        model: "MiniMax-M3".to_owned(),
+        ..PredictConfig::default()
+    };
+    assert_eq!(direct.request_timeout_ms(), 5000);
+    assert_eq!(
+        PredictConfig {
+            reasoning_effort: "high".to_owned(),
+            ..direct
+        }
+        .request_timeout_ms(),
+        15_000
+    );
 }
 
 #[test]

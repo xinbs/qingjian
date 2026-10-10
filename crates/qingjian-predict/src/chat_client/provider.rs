@@ -49,12 +49,17 @@ impl Provider {
         }
     }
 
-    pub(crate) fn timeout_ms(self, configured: u64) -> u64 {
-        if self == Self::MiniMax {
+    pub(crate) fn timeout_ms(self, configured: u64, model: &str, effort: &str) -> u64 {
+        let direct = self.is_minimax_m3(model) && effort.trim().eq_ignore_ascii_case("none");
+        if self == Self::MiniMax && !direct {
             configured.max(MINIMAX_TIMEOUT_MS)
         } else {
             configured
         }
+    }
+
+    fn is_minimax_m3(self, model: &str) -> bool {
+        self == Self::MiniMax && model == "MiniMax-M3"
     }
 
     pub(super) fn prepare_request(
@@ -69,7 +74,10 @@ impl Provider {
         match self {
             Self::MiniMax => {
                 // M2.x 不能关闭思考；只有明确支持关闭的 M3 使用 disabled。
-                let direct = fields.get("model").and_then(Value::as_str) == Some("MiniMax-M3")
+                let direct = fields
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .is_some_and(|model| self.is_minimax_m3(model))
                     && matches!(effort, Some(ReasoningEffort::None));
                 fields.remove("reasoning_effort");
                 fields.insert("reasoning_split".to_owned(), Value::Bool(true));

@@ -66,7 +66,11 @@ impl Default for PredictConfig {
 impl PredictConfig {
     /// 包含服务商最低等待时间的实际请求超时，客户端与平台轮询共用。
     pub fn request_timeout_ms(&self) -> u64 {
-        crate::chat_client::provider::Provider::for_url(&self.base_url).timeout_ms(self.timeout_ms)
+        crate::chat_client::provider::Provider::for_url(&self.base_url).timeout_ms(
+            self.timeout_ms,
+            &self.model,
+            &self.reasoning_effort,
+        )
     }
 
     /// 配置里的密钥优先，其次环境变量；两边都没有返回 `None`。

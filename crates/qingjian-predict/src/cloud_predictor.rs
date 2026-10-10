@@ -1,5 +1,8 @@
-use std::sync::mpsc::{self, Receiver, Sender};
+//! 云联想入口：发布最新输入状态，后台可取消被替代的请求。
+
+use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
+use tokio::sync::watch;
 
 use qingjian_core::{Prediction, PredictionPolicy, PredictionRequest, Predictor};
 
@@ -14,7 +17,7 @@ pub struct CloudPredictor {
     policy: PredictionPolicy,
 
     /// 往后台线程发请求。
-    requests: Sender<PredictionRequest>,
+    requests: watch::Sender<Option<PredictionRequest>>,
 
     /// 从后台线程收结果。
     responses: Receiver<Prediction>,
@@ -27,7 +30,7 @@ impl CloudPredictor {
             .resolve_api_key()
             .ok_or_else(|| PredictError::MissingApiKey(config.api_key_env.clone()))?;
         let client = ChatClient::new(config, api_key);
-        let (requests, request_rx) = mpsc::channel();
+        let (requests, request_rx) = watch::channel(None);
         let (response_tx, responses) = mpsc::channel();
         let worker = Worker::new(
             request_rx,
@@ -63,9 +66,13 @@ impl Predictor for CloudPredictor {
     }
 
     fn submit(&mut self, request: PredictionRequest) {
-        if self.requests.send(request).is_err() {
+        if self.requests.send(Some(request)).is_err() {
             tracing::warn!("联想线程已退出，请求被丢弃");
         }
+    }
+
+    fn cancel(&mut self) {
+        let _ = self.requests.send(None);
     }
 
     fn poll(&mut self) -> Option<Prediction> {

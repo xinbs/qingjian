@@ -1,7 +1,8 @@
 //! 后台线程：收请求、防抖、查缓存、发网络请求、回结果。
 
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
+use tokio::sync::watch;
 
 use qingjian_core::{Prediction, PredictionRequest};
 
@@ -16,7 +17,7 @@ const CACHE_CAPACITY: usize = 64;
 
 pub struct Worker {
     /// 请求入口。主线程 drop 掉发送端后线程自然退出。
-    requests: Receiver<PredictionRequest>,
+    requests: watch::Receiver<Option<PredictionRequest>>,
 
     /// 结果出口。
     responses: Sender<Prediction>,
@@ -31,12 +32,15 @@ pub struct Worker {
     cache: PredictionCache,
 }
 
+#[cfg(test)]
+mod tests;
+
 /// 缓存里存的是解析后的回复。
 type Cached = Reply;
 
 impl Worker {
     pub fn new(
-        requests: Receiver<PredictionRequest>,
+        requests: watch::Receiver<Option<PredictionRequest>>,
         responses: Sender<Prediction>,
         client: ChatClient,
         debounce: Duration,
@@ -55,10 +59,35 @@ impl Worker {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
-        while let Ok(first) = self.requests.recv() {
-            let Some(request) = self.debounce(first) else {
-                return Ok(());
+        runtime.block_on(self.run_async());
+        Ok(())
+    }
+
+    async fn run_async(&mut self) {
+        let mut latest = None;
+        loop {
+            if latest.is_none() {
+                if self.requests.changed().await.is_err() {
+                    return;
+                }
+                latest = self.requests.borrow_and_update().clone();
+            }
+            let Some(request) = latest.take() else {
+                continue;
             };
+            let queued = Instant::now();
+            // 输入一变就重新防抖；取消值 None 不会发网络请求。
+            tokio::select! {
+                biased;
+                changed = self.requests.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    latest = self.requests.borrow_and_update().clone();
+                    continue;
+                }
+                () = tokio::time::sleep(self.debounce) => {}
+            }
             let key = PredictionCache::key(&request);
             if let Some(reply) = self.cache.get(&key) {
                 tracing::debug!(sequence = request.sequence, kind = ?request.kind, "联想命中缓存");
@@ -66,11 +95,29 @@ impl Worker {
                 continue;
             }
             let start = Instant::now();
-            match runtime.block_on(self.client.complete(&request)) {
+            // 丢掉网络 future 会关闭旧请求的本地等待，新输入不再排在它后面。
+            let result = tokio::select! {
+                biased;
+                changed = self.requests.changed() => {
+                    tracing::debug!(
+                        sequence = request.sequence,
+                        elapsed_ms = start.elapsed().as_millis(),
+                        "取消过期的联想请求"
+                    );
+                    if changed.is_err() {
+                        return;
+                    }
+                    latest = self.requests.borrow_and_update().clone();
+                    continue;
+                }
+                result = self.client.complete(&request) => result,
+            };
+            match result {
                 Ok(reply) => {
                     tracing::info!(
                         sequence = request.sequence,
                         elapsed_ms = start.elapsed().as_millis(),
+                        total_ms = queued.elapsed().as_millis(),
                         words = reply.words.len(),
                         sentence = reply.sentence.is_some(),
                         "联想完成"
@@ -83,20 +130,13 @@ impl Worker {
                     self.reply(request.sequence, reply);
                 }
                 Err(error) => {
-                    tracing::warn!(sequence = request.sequence, %error, "联想失败");
+                    tracing::warn!(
+                        sequence = request.sequence,
+                        elapsed_ms = start.elapsed().as_millis(),
+                        %error,
+                        "联想失败"
+                    );
                 }
-            }
-        }
-        Ok(())
-    }
-
-    /// 防抖：在窗口内持续收到新请求就一直等，只保留最后一个。发送端关闭返回 `None`。
-    fn debounce(&self, mut latest: PredictionRequest) -> Option<PredictionRequest> {
-        loop {
-            match self.requests.recv_timeout(self.debounce) {
-                Ok(newer) => latest = newer,
-                Err(RecvTimeoutError::Timeout) => return Some(latest),
-                Err(RecvTimeoutError::Disconnected) => return None,
             }
         }
     }

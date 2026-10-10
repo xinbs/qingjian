@@ -65,10 +65,9 @@ impl Host {
     pub fn await_prediction(&mut self) {
         self.sentence = None;
         let config = &self.settings.config().predict;
-        // 当前请求可能等前一条在飞的请求结束；后台随后会把队列压成最新一条。
+        // 后台取消旧请求，只等当前请求的防抖与超时，再给定时器留一点余量。
         let max_wait = config
             .request_timeout_ms()
-            .saturating_mul(2)
             .saturating_add(config.debounce_ms)
             .saturating_add(1000);
         self.monitor

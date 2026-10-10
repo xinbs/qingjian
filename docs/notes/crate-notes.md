@@ -85,7 +85,9 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 
 ## crates/qingjian-predict
 
-- `CloudPredictor`：`Predictor` trait 的网络实现（async-openai，OpenAI 兼容接口，默认 DeepSeek），后台线程防抖 / 缓存 / 超时，`submit` / `poll` 非阻塞。
+- `CloudPredictor`：`Predictor` trait 的网络实现（async-openai，OpenAI 兼容接口，默认 DeepSeek），后台线程防抖 / 缓存 / 超时，`submit` / `cancel` / `poll` 非阻塞。
+  `tokio::sync::watch` 只保留最新请求（`None` 表示取消），防抖和 HTTP 请求均与状态变化竞争；输入变化或 Predictor 被替换 / 丢弃时丢掉旧 HTTP future，新请求不再排队等待。
+  Core 的 `Predictor::cancel` 默认空操作，`request_prediction` 换序号时与 `cancel_prediction` 一并调用；现有本地 Predictor 保持兼容。
   `PredictConfig` 是配置的 `[predict]` 分节。只在组句中联想，一次请求给云端词（容错校验后补进候选第一页末尾 `[predict] slots` 格，缺省 2，不预留不占位，
   前面的本地候选不挪；排布在 Core `CandidateLayout`）和整句补全（preedit 右侧，Tab）；上屏后不联想，本地历史不进请求。
   简拼（半数以上音节是缩写）的请求 `max_items = 0`，只求整句补全（`prediction::mostly_abbreviated`）：按声母凑出来的词大多是生造词，
@@ -98,10 +100,11 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 - `ChatClient` 按 URL 主机适配思考参数：智谱 / Kimi 的 `none` 转成 `thinking.type=disabled`，通义转成 `enable_thinking=false`；
   官方 OpenAI 的 GPT-4 系列不发不支持的 `reasoning_effort`。MiniMax 发 `reasoning_split=true`，不发 `reasoning_effort`；
   `MiniMax-M3` 在 `none` 时转成 `thinking.type=disabled`，只留正文额度（联想 200、探活 32），也是设置页预设模型。
-  M2.x 不能关闭思考，其余 MiniMax 请求在正文额度之外加 2048 tokens 思考预算；实际请求至少等 15 秒，更大的 `timeout_ms` 照用。
-  `PredictConfig::request_timeout_ms` 是客户端与 macOS 候选轮询共用的有效超时，轮询兼顾前一条在飞的请求与防抖。
+  M3 关闭思考时按配置的 `timeout_ms` 等待；M2.x 不能关闭思考，其余 MiniMax 请求在正文额度之外加 2048 tokens 思考预算，实际请求至少等 15 秒，更大的 `timeout_ms` 照用。
+  `PredictConfig::request_timeout_ms` 是客户端与 macOS 候选轮询共用的有效超时，轮询等待当前请求的防抖、超时与 1 秒定时器余量。
   MiniMax 旧式 `<think>…</think>` 只剥离正文开头完整的思考段；截断或非 JSON 正文报错，联想字段缺失 / 类型错误也不再记成空结果成功。
   响应的 `service_tier` 是服务商计费信息，不参与正文解析，兼容 M3 返回的 `standard` 等 SDK 未知值。
+  业务 JSON 字段类型错误时只记固定字段的类型与数组元素计数，不记录模型正文；联想完成日志分别记接口耗时 `elapsed_ms` 与含防抖的 `total_ms`。
   「测试连接」要求实际得到 `{"ok":true}`，仅有思考文字不会显示连接正常。
 
 ## crates/qingjian-format

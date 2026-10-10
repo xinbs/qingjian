@@ -186,8 +186,10 @@ pub fn parse_reply(content: &str, request: &PredictionRequest) -> Result<Reply, 
     if !has_fields {
         return Err(PredictError::InvalidReply("prediction fields are missing"));
     }
-    let raw: RawReply = serde_json::from_value(json)
-        .map_err(|_| PredictError::InvalidReply("prediction fields have invalid types"))?;
+    let raw = RawReply::deserialize(&json).map_err(|_| {
+        tracing::warn!(shape = %reply_shape(&json), "联想回复字段类型不符合约定");
+        PredictError::InvalidReply("prediction fields have invalid types")
+    })?;
     if request.kind == PredictionKind::Question {
         return Ok(parse_answers(raw.answers, request.max_items));
     }
@@ -236,6 +238,46 @@ pub fn parse_reply(content: &str, request: &PredictionRequest) -> Result<Reply, 
             .filter(|s| !s.is_empty() && Some(s.as_str()) != first_local);
     }
     Ok(reply)
+}
+
+/// 只记录固定字段的类型和计数，避免排查解析失败时泄漏模型正文或输入上下文。
+fn reply_shape(json: &serde_json::Value) -> String {
+    ["words", "sentence", "answers"]
+        .map(|field| format!("{field}={}", field_shape(json.get(field))))
+        .join(" ")
+}
+
+fn field_shape(value: Option<&serde_json::Value>) -> String {
+    let Some(serde_json::Value::Array(items)) = value else {
+        return json_type(value).to_owned();
+    };
+    let mut summaries = Vec::new();
+    for field in [None, Some("text"), Some("pinyin")] {
+        let mut counts = std::collections::BTreeMap::new();
+        for item in items {
+            let value = field.map_or(Some(item), |field| item.get(field));
+            *counts.entry(json_type(value)).or_insert(0_usize) += 1;
+        }
+        let counts = counts
+            .into_iter()
+            .map(|(kind, count)| format!("{kind}:{count}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        summaries.push(format!("{}={{{counts}}}", field.unwrap_or("items")));
+    }
+    format!("array(len={}; {})", items.len(), summaries.join("; "))
+}
+
+fn json_type(value: Option<&serde_json::Value>) -> &'static str {
+    match value {
+        None => "missing",
+        Some(serde_json::Value::Null) => "null",
+        Some(serde_json::Value::Bool(_)) => "bool",
+        Some(serde_json::Value::Number(_)) => "number",
+        Some(serde_json::Value::String(_)) => "string",
+        Some(serde_json::Value::Array(_)) => "array",
+        Some(serde_json::Value::Object(_)) => "object",
+    }
 }
 
 /// 问字模式的答案：去空、去重，拼音只是显示用的读音，不校验。
@@ -389,6 +431,42 @@ mod tests {
         assert!(
             parse_reply(r#"{"words": [], "sentence": null}"#, &request("zt", false)).is_empty()
         );
+    }
+
+    #[test]
+    fn reply_shape_reports_types_without_logging_any_values() {
+        let json = serde_json::json!({
+            "words": [{"text": "secret text", "pinyin": null}, {"text": 42}, "secret entry"],
+            "sentence": "secret sentence",
+            "ignored-secret-key": "secret value"
+        });
+        assert_eq!(
+            reply_shape(&json),
+            "words=array(len=3; items={object:2,string:1}; text={missing:1,number:1,string:1}; pinyin={missing:2,null:1}) sentence=string answers=missing"
+        );
+        assert!(!reply_shape(&json).contains("secret"));
+        let json = serde_json::json!({"words": null, "sentence": false, "answers": []});
+        assert_eq!(
+            reply_shape(&json),
+            "words=null sentence=bool answers=array(len=0; items={}; text={}; pinyin={})"
+        );
+        assert!(super::parse_reply(r#"{"words": null}"#, &request("zt", false)).is_err());
+    }
+
+    #[test]
+    fn reply_shape_has_bounded_output_for_many_entries_and_nested_values() {
+        let json = serde_json::json!({
+            "words": vec![serde_json::json!({"text": {"private": "secret"}, "pinyin": ["secret"]}); 1000],
+            "sentence": 123,
+            "answers": "secret"
+        });
+        let shape = reply_shape(&json);
+        assert!(shape.contains("len=1000"));
+        assert!(shape.contains("text={object:1000}; pinyin={array:1000}"));
+        assert!(shape.contains("sentence=number answers=string"));
+        assert!(!shape.contains("secret"));
+        assert!(!shape.contains("private"));
+        assert!(shape.len() < 300);
     }
 
     #[test]
