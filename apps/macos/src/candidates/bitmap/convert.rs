@@ -47,6 +47,7 @@ fn row(row: &Row) -> qingjian_render::Row {
             .map(|(text, tone)| {
                 let tone = match tone {
                     Tone::Gloss => qingjian_render::Tone::Gloss,
+                    Tone::CloudGloss => qingjian_render::Tone::CloudGloss,
                     Tone::Fresh => qingjian_render::Tone::Fresh,
                     Tone::Faint => qingjian_render::Tone::Faint,
                     Tone::Pos => qingjian_render::Tone::Pos,

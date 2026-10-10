@@ -45,10 +45,10 @@ impl Evaluator<'_> {
         Some(value)
     }
 
-    /// 乘除。`x` 也当乘号，键盘上打 `*` 要按 Shift。
+    /// 乘除。`x` / `X` 也当乘号，键盘上打 `*` 要按 Shift。
     fn term(&mut self) -> Option<f64> {
         let mut value = self.unary()?;
-        while let Some(op @ (b'*' | b'x' | b'/' | b'%')) = self.peek() {
+        while let Some(op @ (b'*' | b'x' | b'X' | b'/' | b'%')) = self.peek() {
             self.position += 1;
             let rhs = self.unary()?;
             value = if matches!(op, b'/' | b'%') {

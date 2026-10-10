@@ -44,7 +44,7 @@
 | `text` | `bind` 或 `text`（固定文字）、`font`、`color`、`stroke` |
 | `icon` | `icon`（cloud / gear）、`size`、`color`；盒子缺省与图标同大，图标垂直居中 |
 | `preedit` | `font`、`typed` / `rest` / `struck` 三种拼音颜色、`caret: { width, color }`、`stroke` |
-| `annotation` | `bind`、`font`、`gloss` / `fresh` / `faint` 三种颜色（`pos`、`separator` 可单独写，缺省同 `faint`）、`tones`（只画哪几种片段）、`senses`（只画前几个义项）、`stroke` |
+| `annotation` | `bind`、`font`、`gloss` / `fresh` / `faint` 三种颜色，另可写 `cloud_gloss`（云译文，缺省按浅深外观使用蓝色）、`pos` / `separator`（缺省同 `faint`）、`tones`（只画哪几种片段）、`senses`（只画前几个义项）、`stroke` |
 | `use` | `component`：引用组件，这里写的盒子属性盖过组件根节点的 |
 | `repeat` | `bind`（`candidates`）、`component`：每项候选实例化一份 |
 
@@ -58,7 +58,7 @@
   输入状态：`mode.english`、`mode.traditional`、`mode.full_width`、`mode.scheme`（有方案名）。
 - **绑定**：文字 `index`、`text`（候选项）、`page`、`trailing.text`、`mode.scheme`（方案显示名）；译文 `annotation`（候选项）、`highlighted.annotation`；列表 `candidates`。
 - **条件颜色**：`{ "if": "highlighted", "then": "@hl_text", "else": "@text" }`，条件写法同 `when`。系统蓝、微信绿的高亮白字靠它；青简绿里 `hl_*` 与普通颜色同值。
-- **译文片段**：壳把译文拼成一串带种类（`Tone`）的片段：`gloss` 译文、`fresh` 生词译文、`pos` 词性、`separator` 义项间的 ` · `、`faint` 假名注音、`code` 辅码。
+- **译文片段**：壳把译文拼成一串带种类（`Tone`）的片段：`gloss` 随包译文、`cloud_gloss` 云译文（含个人释义缓存）、`fresh` 随包生词译文、`pos` 词性、`separator` 义项间的 ` · `、`faint` 假名注音、`code` 辅码。云来源优先于生词强调色，词性与来源独立。旧主题的 `tones: ["gloss", "fresh"]` 仍包含云译文，也可只写 `cloud_gloss` 筛云译文。
   `tones` 按种类挑、`senses` 按分隔数截前几个义项，词性与译文分两行排就是两个节点；挑完是空的也留着节点，主题给它定高就照样占行。系统绘制的旧路径把 `pos` / `separator` 画成与 `faint` 同色。
 - **输入状态**（`Frame::mode`）：渲染器只给事实（三个布尔与方案名），显示什么字由主题用 `when` 分支写，渲染器里没有「中 / 英」这类文案。
   mac 壳组装候选帧时填（中英看 Caps Lock，与菜单栏一致；简繁、标点、方案看配置；英文模式标点算半角）；

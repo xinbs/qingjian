@@ -218,6 +218,14 @@ fn missing_glosses_are_requested_on_commit_and_learned_when_they_arrive() {
             .text,
         "open"
     );
+    assert_eq!(
+        query.candidates.items[0]
+            .translation
+            .as_ref()
+            .unwrap()
+            .source,
+        crate::TranslationSource::Cloud
+    );
     // 没有释义兜底时不问
     let mut plain = Engine::new(Dictionary::parse(SAMPLE).unwrap())
         .with_translator(Box::new(LearningTranslator::default()));

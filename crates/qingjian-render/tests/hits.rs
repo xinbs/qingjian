@@ -2,7 +2,7 @@
 
 mod scenes;
 
-use qingjian_render::{FontLibrary, HitRegion, HitTarget, Layout, Renderer, Theme};
+use qingjian_render::{FontLibrary, HitRegion, HitTarget, Layout, Renderer, Theme, Tone};
 
 fn region(hits: &[HitRegion], target: HitTarget) -> HitRegion {
     *hits
@@ -77,6 +77,48 @@ fn candidates_and_their_translations_are_clickable() {
                 "{what}"
             );
             assert_eq!(rendered.hit_at(-1.0, -1.0), None, "{what}");
+        }
+    }
+}
+
+#[test]
+fn cloud_translation_color_changes_without_losing_click_targets() {
+    let Ok(library) = FontLibrary::system("zh-CN") else {
+        eprintln!("没有系统字体，跳过");
+        return;
+    };
+    let mut renderer = Renderer::new(library);
+    let local = scenes::nihao();
+    let mut cloud = local.clone();
+    for row in &mut cloud.rows {
+        for (_, tone) in &mut row.annotation {
+            if matches!(*tone, Tone::Gloss | Tone::Fresh) {
+                *tone = Tone::CloudGloss;
+            }
+        }
+    }
+    for id in ["qingjian", "system-blue", "wechat", "sakura"] {
+        for dark in [false, true] {
+            let theme = Theme::builtin(id, dark).unwrap().with_animations(false);
+            for layout in [Layout::Vertical, Layout::Horizontal] {
+                let bundled = renderer.render(&local, layout, &theme, 2.0).unwrap();
+                let rendered = renderer.render(&cloud, layout, &theme, 2.0).unwrap();
+                assert_ne!(
+                    bundled.pixmap.data(),
+                    rendered.pixmap.data(),
+                    "{id} {dark} {layout:?}"
+                );
+                let target = HitTarget::Translation {
+                    candidate: 0,
+                    sense: 0,
+                };
+                let (x, y) = center(region(&rendered.hits, target), rendered.scale);
+                assert_eq!(
+                    rendered.hit_at(x, y),
+                    Some(target),
+                    "{id} {dark} {layout:?}"
+                );
+            }
         }
     }
 }

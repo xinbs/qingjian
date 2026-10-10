@@ -21,6 +21,9 @@ pub struct Theme {
     /// 译文颜色。
     pub gloss_color: Retained<NSColor>,
 
+    /// 云端补充译文的颜色。
+    pub cloud_gloss_color: Retained<NSColor>,
+
     /// 词性颜色，比译文更浅。
     pub pos_color: Retained<NSColor>,
 
@@ -64,6 +67,7 @@ impl Theme {
             index_font: NSFont::systemFontOfSize(11.0),
             text_color: NSColor::labelColor(),
             gloss_color: NSColor::secondaryLabelColor(),
+            cloud_gloss_color: NSColor::systemBlueColor(),
             pos_color: NSColor::tertiaryLabelColor(),
             fresh_color: NSColor::systemOrangeColor(),
             index_color: NSColor::tertiaryLabelColor(),

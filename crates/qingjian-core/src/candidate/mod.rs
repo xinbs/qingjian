@@ -11,6 +11,7 @@ mod list;
 mod part_of_speech;
 mod sense;
 mod translation;
+mod translation_source;
 
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +23,7 @@ pub use list::CandidateList;
 pub use part_of_speech::{PartOfSpeech, UnknownPartOfSpeech};
 pub use sense::Sense;
 pub use translation::Translation;
+pub use translation_source::TranslationSource;
 
 /// 一个可上屏的候选。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

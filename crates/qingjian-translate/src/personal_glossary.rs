@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use qingjian_core::storage::{read_text_lossy, write_atomic_str};
-use qingjian_core::{Language, Sense, Translation};
+use qingjian_core::{Language, Sense, Translation, TranslationSource};
 
 use crate::GlossaryError;
 use crate::glossary::parse_sense;
@@ -66,10 +66,11 @@ impl PersonalGlossary {
     }
 
     /// 记一条（同词覆盖）；语言对不上的不收。
-    pub fn insert(&mut self, word: &str, translation: Translation) {
+    pub fn insert(&mut self, word: &str, mut translation: Translation) {
         if translation.language != self.language || translation.senses().is_empty() {
             return;
         }
+        translation.source = TranslationSource::Cloud;
         self.entries.insert(word.to_owned(), translation);
         self.dirty = true;
     }
@@ -147,7 +148,9 @@ fn parse(language: Language, text: &str) -> HashMap<String, Translation> {
             tracing::warn!(line = number + 1, "个人释义表有坏行，跳过");
             continue;
         }
-        entries.insert(word.to_owned(), Translation::new(language, senses));
+        let mut translation = Translation::new(language, senses);
+        translation.source = TranslationSource::Cloud;
+        entries.insert(word.to_owned(), translation);
     }
     entries
 }
@@ -183,6 +186,10 @@ mod tests {
         let mut glossary = PersonalGlossary::open(Language::Japanese, &path);
         assert_eq!(glossary.len(), 1);
         assert_eq!(
+            glossary.translate("开放").unwrap().source,
+            TranslationSource::Cloud
+        );
+        assert_eq!(
             glossary.translate("开放").unwrap().senses()[0]
                 .reading
                 .as_deref(),
@@ -200,6 +207,10 @@ mod tests {
         // 语言不对的不收
         glossary.insert("测试", translation(Language::English, None, "test", None));
         assert_eq!(glossary.len(), 2);
+        assert_eq!(
+            glossary.translate("开发").unwrap().source,
+            TranslationSource::Cloud
+        );
         glossary.save().unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.ends_with("开发\tv. 開発する|かいはつする\n开放\tadj. 開放的|かいほうてき\n"));
@@ -207,6 +218,10 @@ mod tests {
         assert_eq!(
             reloaded.translate("开发").unwrap().senses()[0].text,
             "開発する"
+        );
+        assert_eq!(
+            reloaded.translate("开发").unwrap().source,
+            TranslationSource::Cloud
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

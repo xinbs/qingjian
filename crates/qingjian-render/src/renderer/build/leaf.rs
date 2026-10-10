@@ -67,6 +67,7 @@ impl Builder<'_> {
                 bind,
                 font,
                 gloss,
+                cloud_gloss,
                 fresh,
                 faint,
                 pos,
@@ -89,19 +90,22 @@ impl Builder<'_> {
                 };
                 let mut children = Vec::with_capacity(segments.len());
                 for ((segment, tone), sense) in segments {
-                    let color = match tone {
+                    let color_spec = match tone {
                         // 码是词本身的属性，与译文同一个淡色
-                        Tone::Gloss | Tone::Code => gloss,
-                        Tone::Fresh => fresh,
-                        Tone::Faint => faint,
-                        Tone::Pos => pos.as_ref().unwrap_or(faint),
-                        Tone::Separator => separator.as_ref().unwrap_or(faint),
+                        Tone::Gloss | Tone::Code => Some(gloss),
+                        Tone::CloudGloss => cloud_gloss.as_ref(),
+                        Tone::Fresh => Some(fresh),
+                        Tone::Faint => Some(faint),
+                        Tone::Pos => Some(pos.as_ref().unwrap_or(faint)),
+                        Tone::Separator => Some(separator.as_ref().unwrap_or(faint)),
                     };
+                    let color = color_spec.map_or_else(
+                        || self.theme.cloud_gloss_color(),
+                        |color| self.color(color, ctx),
+                    );
                     let visual = Visual::Text {
                         text: segment.clone(),
-                        style: self
-                            .text_style(font, self.color(color, ctx))
-                            .stroked(stroke),
+                        style: self.text_style(font, color).stroked(stroke),
                     };
                     let child = self.scene.node(Style::default(), visual, &[])?;
                     if let Some(candidate) = candidate
@@ -234,6 +238,22 @@ mod tests {
 
     fn texts(picked: Vec<(&(String, Tone), usize)>) -> Vec<&str> {
         picked.iter().map(|((text, _), _)| text.as_str()).collect()
+    }
+
+    #[test]
+    fn cloud_gloss_remains_visible_in_older_theme_filters() {
+        let segments = vec![("About this matter".to_owned(), Tone::CloudGloss)];
+        for filters in [
+            &[ToneFilter::Gloss][..],
+            &[ToneFilter::Fresh][..],
+            &[ToneFilter::CloudGloss][..],
+        ] {
+            assert_eq!(
+                texts(pick_segments(&segments, Some(filters), None)),
+                ["About this matter"]
+            );
+        }
+        assert!(pick_segments(&segments, Some(&[ToneFilter::Pos]), None).is_empty());
     }
 
     #[test]

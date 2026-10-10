@@ -8,6 +8,7 @@ use super::rgb;
 pub(super) struct Palette {
     pub(super) text_color: COLORREF,
     pub(super) gloss_color: COLORREF,
+    pub(super) cloud_gloss_color: COLORREF,
     pub(super) pos_color: COLORREF,
     pub(super) fresh_color: COLORREF,
     pub(super) index_color: COLORREF,
@@ -22,6 +23,7 @@ impl Palette {
         Self {
             text_color: rgb(0x1d, 0x1d, 0x1f),
             gloss_color: rgb(0x6b, 0x6b, 0x70),
+            cloud_gloss_color: rgb(0x00, 0x70, 0xd4),
             pos_color: rgb(0xa0, 0xa0, 0xa6),
             fresh_color: rgb(0xff, 0x95, 0x00),
             index_color: rgb(0xa0, 0xa0, 0xa6),
@@ -37,6 +39,7 @@ impl Palette {
         Self {
             text_color: rgb(0xf5, 0xf5, 0xf7),
             gloss_color: rgb(0xae, 0xae, 0xb2),
+            cloud_gloss_color: rgb(0x64, 0xb5, 0xff),
             pos_color: rgb(0x8e, 0x8e, 0x93),
             fresh_color: rgb(0xff, 0x9f, 0x0a),
             index_color: rgb(0x8e, 0x8e, 0x93),

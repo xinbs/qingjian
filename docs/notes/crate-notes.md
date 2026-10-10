@@ -60,9 +60,11 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 
 `Engine::discard_input` / `EngineSession::discard_input` 用于隐私能力变化时无痕清理输入，包括透传缓冲、学习链和暂存词汇曝光；`set_private` 只切换写入开关，保留已输入的组句。
 
-数字开头即时算式由 Core `calculator` / `Engine::calculation_accepts` 分流，`=` 后生成单个 `Shortcut` 结果，整缓冲区消耗，不学词、不请求云联想。求值复用 `shortcut::evaluate`，支持 `%` 取余、右结合乘方（高于一元符号）、128 字节和 32 递归层限制，浮点结果十位小数，绝对值 ≥1e15 或 <1e-10 用科学计数。macOS 中文模式接入，注音数字仍按原方案处理；数字键在等号后恢复选结果，空格 / 回车接受结果。
+数字开头即时算式由 Core `calculator` / `Engine::calculation_accepts` 分流，`=` 后生成单个 `Shortcut` 结果，整缓冲区消耗，不学词、不请求云联想。求值复用 `shortcut::evaluate`，支持 `%` 取余、右结合乘方（高于一元符号）、128 字节和 32 递归层限制，浮点结果十位小数，绝对值 ≥1e15 或 <1e-10 用科学计数。macOS 中英文模式接入（含 Shift 直通、Caps Lock、按应用关闭英文候选），中文注音数字仍按原方案处理。算式强制行内显示，只有可用结果才绘制单行计算框，不显示候选序号；系统绘制与位图绘制均支持点击结果。等号后点击 / 1 接受结果，Enter / 2 保留完整原文，Space 保留原文并透传空格，Tab 保留原文后交给应用。左右键编辑算式，不参与横排矩阵导航。
 
 ## crates/qingjian-translate
+
+候选 `Translation::source` 区分 `Bundled` 与 `Cloud`（旧协议缺省 Bundled）。`poll_glosses` 写入时标 Cloud；`PersonalGlossary` 插入与解析都恢复 Cloud，TSV 格式不变，重启后仍可辨认云缓存。macOS / Windows 与共享渲染器采用 `Tone::CloudGloss`，优先于 `Sense::fresh` 的橙色，但不改变学习次数。主题 `annotation.cloud_gloss` 可覆盖蓝色；旧 gloss / fresh 过滤器保持包含云译文。
 
 `Glossary`，本地 TSV 释义表（词性 + 译文）；`LevelTable`，词汇等级表（`assets/levels/levels-{en,ja}.tsv`，CEFR A1–C2 / JLPT N5–N1，
 `uv run tools/corpus/levels.py` 从 `data/levels/` 的原始 CSV 生成，来源与许可见 `assets/levels/README.md`），「统计」页按级数词汇用，不进候选。

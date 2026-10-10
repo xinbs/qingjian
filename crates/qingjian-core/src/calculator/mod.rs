@@ -15,7 +15,7 @@ pub(crate) fn is_character(c: char) -> bool {
     c.is_ascii_digit()
         || matches!(
             c,
-            '+' | '-' | '*' | 'x' | '/' | '%' | '^' | '.' | '(' | ')' | '='
+            '+' | '-' | '*' | 'x' | 'X' | '/' | '%' | '^' | '.' | '(' | ')' | '='
         )
 }
 

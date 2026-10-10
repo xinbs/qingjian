@@ -1,5 +1,6 @@
 //! 呈现：删候选、按应用关英文候选、翻译选区的起止、提示气泡、会话重置与候选窗口绘制。
 
+mod calculation;
 mod notice;
 mod translation_job;
 
@@ -75,7 +76,10 @@ impl Host {
     /// 横排矩阵这套按键是否生效：开关开着（`[general] horizontal_grid`）、排布是横排，而且在用系统绘制。
     /// 青简渲染器还没有矩阵窗口，用它时不展开，横排照单行走（见 `docs/notes/crate-notes.md`）。
     pub fn grid_keys(&self) -> bool {
-        self.horizontal_grid && self.layout == LayoutMode::Horizontal && !self.window.uses_bitmap()
+        !self.engine.is_calculating()
+            && self.horizontal_grid
+            && self.layout == LayoutMode::Horizontal
+            && !self.window.uses_bitmap()
     }
 
     /// 新一轮候选：每页格数取配置与窗口能画的行数中较小者，云端槽位数取配置。
@@ -89,6 +93,10 @@ impl Host {
 
     /// 按会话状态画候选窗口。候选为空且没有 preedit 时收窗。
     pub fn render(&mut self) {
+        if self.engine.is_calculating() {
+            self.render_calculation();
+            return;
+        }
         self.schedule_candidate_gloss();
         let size = self.session.layout.page_size();
         let page = self.session.page;
@@ -141,6 +149,7 @@ impl Host {
         let pages = self.session.pages();
         let footer = (pages > 1).then(|| format!("{}/{pages}", page + 1));
         let frame = Frame {
+            calculation: false,
             preedit,
             rows,
             highlighted: self.session.highlighted.saturating_sub(first),

@@ -1,7 +1,7 @@
 //! 候选窗口的一行：[`Candidate`] → 渲染器的 [`Row`]（序号、候选词、annotation 片段），与 macOS 端 `candidates/row.rs` 一致。
 //! GDI 画法也用同一个类型。
 
-use qingjian_core::{Candidate, CandidateKind};
+use qingjian_core::{Candidate, CandidateKind, TranslationSource};
 use qingjian_render::{Row, Tone};
 
 /// `position` 是页内下标（从 0 起）。`show_code` 是 `[general] aux_code_show`：
@@ -24,7 +24,9 @@ pub(crate) fn from_candidate(position: usize, candidate: &Candidate, show_code: 
             if let Some(pos) = sense.part_of_speech {
                 annotation.push((format!("{pos} "), Tone::Pos));
             }
-            let tone = if sense.fresh {
+            let tone = if translation.source == TranslationSource::Cloud {
+                Tone::CloudGloss
+            } else if sense.fresh {
                 Tone::Fresh
             } else {
                 Tone::Gloss

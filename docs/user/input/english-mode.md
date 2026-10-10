@@ -7,7 +7,7 @@ description: 进入英文模式的方式、英文补全与拼写纠正、Space �
 ## 进入英文模式
 
 - **macOS**：单击左右任一 `Shift`（单独按下再松开）在中文与英文直通之间切换，缺省开启，可在「偏好设置 → 通用」取消「单击 Shift 切换中英文」。Shift 与字母、数字等其他键组合不会切换。
-  Shift 切入英文后不出候选，字母、数字、半角标点直接输入，Tab、方向键等交给应用；再单击 Shift 回到中文。组句中切换先把已敲内容原样上屏。中英状态在不同应用间保持。
+  Shift 切入英文后不出英文词候选，字母、数字、半角标点直接输入，Tab、方向键等交给应用；数字开头的算式可显示计算结果小框，见下文。再单击 Shift 回到中文。组句中切换先把已敲内容原样上屏。中英状态在不同应用间保持。
   `Caps Lock` 保留原有行为：锁定状态变化时，亮起切到英文、熄灭回到中文，同时结束 Shift 的直通状态；Caps Lock 英文模式可按设置给出英文候选。
   想让 `Caps Lock` 像系统拼音那样在青简与「ABC」之间切换输入法，在「系统设置 → 键盘 → 文本输入 → 编辑」里打开用 Caps Lock 切换「ABC」的选项：
   轻按 `Caps Lock` 切换输入法，按住仍是大写锁定；青简仍可用单击 Shift 切换内部的英文直通。
@@ -57,7 +57,9 @@ macOS 在配置文件中设置 `[general] english_mode = false` 可关掉内置�
 
 ## 行为
 
-以下候选行为适用于 Windows 英文模式与 macOS 的 Caps Lock 英文模式，且需开启英文候选。macOS 单击 Shift 切入的英文始终直通，不出候选，也不学习个人英文词。
+以下候选行为适用于 Windows 英文模式与 macOS 的 Caps Lock 英文模式，且需开启英文候选。macOS 单击 Shift 切入的普通英文直通，不出英文词候选，也不学习个人英文词。
+
+macOS 的内置英文模式也支持[即时计算](shortcuts.md#输入算式直接计算macos)：输入 `1+1=`，旁边显示结果小框。点击或按 `1` 使用结果，`Enter` / `2` 保留原式，`Space` 保留原式并输入空格。Shift 英文、Caps Lock 英文以及关闭英文候选时均可使用；系统「ABC」输入法不属于青简的内置英文模式。
 
 英文候选模式下输入字母时，候选窗口给出英文词的补全与拼写纠正：`recieve` → receive，`seperate` → separate。
 字母缺省小写，按住 `Shift` 输出大写。
@@ -77,7 +79,7 @@ macOS 在配置文件中设置 `[general] english_mode = false` 可关掉内置�
 
 ## 关闭
 
-- 全局：macOS 在「偏好设置 → 通用」取消「Caps Lock 英文模式也给候选」，Windows 在「设置 → 通用」取消「英文模式给候选」。关闭后为纯直通，与未使用输入法时一致。macOS 的 Shift 英文直通不受此项影响。
+- 全局：macOS 在「偏好设置 → 通用」取消「Caps Lock 英文模式也给候选」，Windows 在「设置 → 通用」取消「英文模式给候选」。关闭后普通英文直接输入；macOS 的即时计算仍可使用。macOS 的 Shift 英文直通不受此项影响。
 - 按应用：终端与代码编辑器中缺省不给候选，以免遮挡应用自身的补全或占用 `Tab` 键。
   macOS 的名单包括 Terminal、iTerm、Warp、Ghostty、VS Code、Cursor、Zed、JetBrains 系列、Xcode 等；
   Windows 的名单包括命令提示符、PowerShell、Windows Terminal、VS Code、Cursor、JetBrains 系列、Visual Studio 等。

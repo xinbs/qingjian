@@ -34,6 +34,9 @@ pub(crate) struct Theme {
 
     pub gloss_color: COLORREF,
 
+    /// 云端补充译文。
+    pub cloud_gloss_color: COLORREF,
+
     pub pos_color: COLORREF,
 
     /// 生词译文，比普通译文醒目。
@@ -80,6 +83,7 @@ impl Theme {
             symbol_font: create_font(-scale(15), w!("Segoe UI Symbol")),
             text_color: palette.text_color,
             gloss_color: palette.gloss_color,
+            cloud_gloss_color: palette.cloud_gloss_color,
             pos_color: palette.pos_color,
             fresh_color: palette.fresh_color,
             index_color: palette.index_color,

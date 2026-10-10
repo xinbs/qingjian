@@ -5,6 +5,9 @@ use super::row::Row;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Frame {
+    /// 计算结果小框；系统绘制也允许点击这一个结果。
+    pub calculation: bool,
+
     /// 顶部拼音行；配置成只在行内显示时为 `None`。
     pub preedit: Option<Preedit>,
 

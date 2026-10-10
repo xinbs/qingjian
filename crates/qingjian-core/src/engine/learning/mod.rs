@@ -4,7 +4,7 @@ use super::Engine;
 use super::input_log::{CommitEntry, InputLogEntry, InputLogger, InputSource, LOGGED_CANDIDATES};
 use super::statistics::Usage;
 use super::vocabulary::{FRESH_UNTIL, VocabularySummary};
-use crate::candidate::{Candidate, CandidateKind, Translation};
+use crate::candidate::{Candidate, CandidateKind, Translation, TranslationSource};
 use crate::sentence;
 
 mod forgotten;
@@ -25,9 +25,10 @@ impl Engine {
             return 0;
         }
         let mut learned = 0;
-        for gloss in filled {
+        for mut gloss in filled {
             if gloss.translation.language == self.translator.language() {
                 tracing::debug!(word = %gloss.word, "释义兜底写入个人释义表");
+                gloss.translation.source = TranslationSource::Cloud;
                 self.translator.learn(&gloss.word, gloss.translation);
                 learned += 1;
             }

@@ -85,6 +85,7 @@ impl Checker<'_> {
             NodeKind::Annotation {
                 font,
                 gloss,
+                cloud_gloss,
                 fresh,
                 faint,
                 pos,
@@ -96,6 +97,7 @@ impl Checker<'_> {
                 self.stroke(stroke.as_ref(), path);
                 for color in [gloss, fresh, faint]
                     .into_iter()
+                    .chain(cloud_gloss)
                     .chain(pos)
                     .chain(separator)
                 {

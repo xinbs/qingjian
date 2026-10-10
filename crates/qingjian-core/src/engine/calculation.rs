@@ -7,10 +7,10 @@ use crate::calculator;
 use crate::candidate::{Candidate, CandidateKind, CandidateList};
 
 impl Engine {
-    /// 中文模式下数字开头进入计算缓冲区；已输入等号时数字恢复为选词键。
+    /// 中英文模式下数字开头进入计算缓冲区；已输入等号时数字恢复为选词键。
     /// 普通标点不能单独开启计算，以免影响中文标点和英文直输段。
     pub fn calculation_accepts(&self, c: char) -> bool {
-        if self.english_mode || self.zhuyin || self.aux_code.is_some() {
+        if (self.zhuyin && !self.english_mode) || self.aux_code.is_some() {
             return false;
         }
         let text = self.composition.text();
@@ -26,7 +26,7 @@ impl Engine {
 
     /// 当前整段缓冲区是否为数字开头的计算输入，包括尚未输入等号的普通数字。
     pub fn is_calculating(&self) -> bool {
-        !self.english_mode && !self.zhuyin && calculator::is_calculation(self.composition.text())
+        (!self.zhuyin || self.english_mode) && calculator::is_calculation(self.composition.text())
     }
 
     pub(super) fn query_calculation(&self, start: Instant) -> Query {

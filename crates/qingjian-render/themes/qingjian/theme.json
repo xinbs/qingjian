@@ -6,6 +6,7 @@
     "text": { "light": "#000000d8", "dark": "#ffffffd8" },
     "gloss": { "light": "#000000a6", "dark": "#ffffffb3" },
     "faint": { "light": "#00000073", "dark": "#ffffff73" },
+    "cloud_gloss": { "light": "#0070d4", "dark": "#64b5ff" },
     "fresh": { "light": "#ff8d28", "dark": "#ff9230" },
     "cloud": { "light": "#00c3d0", "dark": "#00d2e0" },
     "surface": { "light": "#ffffff", "dark": "#1e1e1e" },
@@ -14,6 +15,7 @@
     "hl_text": { "light": "#000000d8", "dark": "#ffffffd8" },
     "hl_gloss": { "light": "#000000a6", "dark": "#ffffffb3" },
     "hl_faint": { "light": "#00000073", "dark": "#ffffff73" },
+    "hl_cloud_gloss": { "light": "#0070d4", "dark": "#64b5ff" },
     "hl_fresh": { "light": "#ff8d28", "dark": "#ff9230" },
     "hl_cloud": { "light": "#00c3d0", "dark": "#00d2e0" }
   },
@@ -67,6 +69,7 @@
         { "type": "use", "component": "word", "margin": [4, 0, 0, 8] },
         { "type": "annotation", "bind": "annotation", "when": "annotations", "font": "annotation",
           "gloss": { "if": "highlighted", "then": "@hl_gloss", "else": "@gloss" },
+          "cloud_gloss": { "if": "highlighted", "then": "@hl_cloud_gloss", "else": "@cloud_gloss" },
           "fresh": { "if": "highlighted", "then": "@hl_fresh", "else": "@fresh" },
           "faint": { "if": "highlighted", "then": "@hl_faint", "else": "@faint" },
           "margin": [8, 0, 0, 8] }
@@ -111,7 +114,7 @@
             ] }
           ] },
         { "type": "annotation", "bind": "highlighted.annotation", "when": "highlighted.annotation",
-          "font": "annotation", "gloss": "@gloss", "fresh": "@fresh", "faint": "@faint",
+          "font": "annotation", "gloss": "@gloss", "cloud_gloss": "@cloud_gloss", "fresh": "@fresh", "faint": "@faint",
           "margin": [2, -5, 0, 5], "padding": [0, 0, 2, 0] }
       ]
     }

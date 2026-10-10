@@ -85,6 +85,9 @@ pub(crate) enum NodeKind {
         /// 译文。
         gloss: ColorSpec,
 
+        /// 云端译文；不写时采用随外观切换的蓝色。
+        cloud_gloss: Option<ColorSpec>,
+
         /// 生词的译文。
         fresh: ColorSpec,
 

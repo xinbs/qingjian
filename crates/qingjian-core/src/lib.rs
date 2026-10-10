@@ -27,7 +27,7 @@ pub use custom_phrase::CustomPhrase;
 
 pub use candidate::{
     Candidate, CandidateKind, CandidateLayout, CandidateList, Cell, GRID_ROWS, Grid, Language,
-    MAX_CELL_EMS, PartOfSpeech, Sense, Translation,
+    MAX_CELL_EMS, PartOfSpeech, Sense, Translation, TranslationSource,
 };
 pub use composition::Composition;
 pub use correction::Correction;

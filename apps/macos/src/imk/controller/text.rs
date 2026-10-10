@@ -19,7 +19,8 @@ impl QingjianInputController {
         // 英文模式组词中 Caps Lock 灭了（或开关关了）：敲的字母先原样上屏，别把它们当拼音
         if composing
             && !english_candidates
-            && host::with(|h| h.engine.english_mode()).unwrap_or(false)
+            && host::with(|h| h.engine.english_mode() && !h.engine.is_calculating())
+                .unwrap_or(false)
         {
             self.commit_raw(client);
             composing = false;
@@ -37,7 +38,45 @@ impl QingjianInputController {
         };
         let c = char::from(*byte);
         host::with(|h| h.indicator.update());
-        // Shift 切出的英文完整直通：不走候选、问字入口或标点转换，命令行读到原来的按键。
+        // 计算先于英文直通与英文词补全分派，Shift / Caps Lock 和按应用关候选都不影响它。
+        let calculation_input = host::with(|h| {
+            if h.engine.composition().is_empty() {
+                h.engine.set_english_mode(english);
+            }
+            if !h.engine.calculation_accepts(c) {
+                return false;
+            }
+            h.engine.push(c);
+            true
+        })
+        .unwrap_or(false);
+        if calculation_input {
+            self.refresh(client);
+            return true;
+        }
+        if composing && host::with(|h| h.engine.is_calculating()).unwrap_or(false) {
+            if c == ' ' {
+                self.commit_raw(client);
+                host::with(|h| h.engine.note_passthrough(c));
+                return false;
+            }
+            if c == '2' {
+                return self.commit_raw(client);
+            }
+            if let Some(offset) = c.to_digit(10).filter(|d| *d > 0)
+                && let Some(index) = host::with(|h| {
+                    let index = h.session.index_on_page(offset as usize - 1)?;
+                    h.session.candidate(index).map(|_| index)
+                })
+                .flatten()
+            {
+                return self.commit_index(index, client);
+            }
+            // 普通文字结束计算输入，保留完整原文再处理当前字符。
+            self.commit_raw(client);
+            return self.handle_text(text, client);
+        }
+        // Shift 切出的英文：算式之外保持直通，不走词候选、问字入口或标点转换。
         if modifiers::direct_english() {
             if composing {
                 self.commit_raw(client);
@@ -134,27 +173,6 @@ impl QingjianInputController {
             }
             host::with(|h| h.engine.note_passthrough(c));
             return false;
-        }
-        // 数字开头的本地算式先收字符，数字不会误选候选，运算符不会变成全角标点。
-        if host::with(|h| h.engine.calculation_accepts(c)).unwrap_or(false) {
-            host::with(|h| h.engine.push(c));
-            self.refresh(client);
-            return true;
-        }
-        if composing && host::with(|h| h.engine.is_calculating()).unwrap_or(false) {
-            let has_result = host::with(|h| h.session.candidate(h.session.highlighted).is_some())
-                .unwrap_or(false);
-            if has_result && (c == ' ' || c == '1') {
-                return self.commit_highlighted(client);
-            }
-            if c == ' ' {
-                self.commit_raw(client);
-                host::with(|h| h.engine.note_passthrough(c));
-                return false;
-            }
-            // 字母或普通标点结束算式输入，先保留用户敲的原文，再处理这个字符。
-            self.commit_raw(client);
-            return self.handle_text(text, client);
         }
         // 表达式模式（v 开头）：数字与运算符进缓冲区，不当选词 / 翻页键
         let expression = composing && host::with(|h| h.engine.expression_mode()).unwrap_or(false);

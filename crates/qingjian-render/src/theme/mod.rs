@@ -142,6 +142,15 @@ impl Theme {
         Self::default_builtin().clone()
     }
 
+    /// 旧主题未写云译文颜色时的缺省配色。
+    pub(crate) fn cloud_gloss_color(&self) -> Color {
+        if self.dark {
+            Color::rgb(0x64, 0xb5, 0xff)
+        } else {
+            Color::rgb(0x00, 0x70, 0xd4)
+        }
+    }
+
     /// 缺省内置主题，深色。
     pub fn dark() -> Self {
         Self::default_builtin().with_dark(true)

@@ -50,7 +50,11 @@ impl QingjianInputController {
                 .unwrap_or_default();
             h.reset_session(preedit, candidates);
             h.schedule_rescoring();
-            (marked, cursor, h.preedit_mode.inline())
+            (
+                marked,
+                cursor,
+                h.preedit_mode.inline() || h.engine.is_calculating(),
+            )
         }) else {
             return;
         };
@@ -167,7 +171,7 @@ impl QingjianInputController {
     /// 上下键被矩阵占了，单行里只剩左右键能挪高亮。返回是不是归了候选（不是的话调用方照旧移动拼音光标）。
     pub(super) fn move_cells(&self, delta: isize, client: TextClient<'_>) -> bool {
         let handled = host::with(|h| {
-            if !h.grid_keys() || h.session.layout.is_empty() {
+            if h.engine.is_calculating() || !h.grid_keys() || h.session.layout.is_empty() {
                 return None;
             }
             Some(if h.session.grid.is_some() {

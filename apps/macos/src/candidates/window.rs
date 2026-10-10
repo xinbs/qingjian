@@ -56,6 +56,8 @@ impl CandidateWindow {
             return;
         }
         let bounds = self.view.set_frame(&frame);
+        self.panel
+            .setIgnoresMouseEvents(!self.view.accepts_clicks());
         let content = self.place(bounds.content.size, anchor);
         let origin = NSPoint::new(
             content.x - bounds.content.origin.x,
@@ -97,7 +99,7 @@ impl CandidateWindow {
         let panel = build_panel(self.mtm, &self.view);
         panel.setAppearance(self.appearance.as_deref());
         panel.setHasShadow(!self.view.uses_bitmap());
-        panel.setIgnoresMouseEvents(!self.view.uses_bitmap());
+        panel.setIgnoresMouseEvents(!self.view.accepts_clicks());
         panel.setFrame_display(frame, true);
         panel.orderFrontRegardless();
         self.panel = panel;
@@ -132,7 +134,8 @@ impl CandidateWindow {
     pub fn set_renderer(&self, renderer: CandidateRenderer) {
         self.view.set_renderer(renderer);
         self.panel.setHasShadow(!self.view.uses_bitmap());
-        self.panel.setIgnoresMouseEvents(!self.view.uses_bitmap());
+        self.panel
+            .setIgnoresMouseEvents(!self.view.accepts_clicks());
     }
 
     /// 点中候选或译词时调谁。

@@ -8,6 +8,7 @@
     "cloud": { "light": "#10aeff", "dark": "#10aeff" },
     "hl_text": "#ffffff",
     "hl_gloss": "#ffffffd9",
+    "hl_cloud_gloss": "#bdeaff",
     "hl_faint": "#ffffffa6",
     "hl_fresh": "#fff3b0",
     "hl_cloud": "#ffffff"
