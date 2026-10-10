@@ -17,7 +17,11 @@ fn accept(listener: &TcpListener) -> TcpStream {
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => {
+                // macOS 接受的 socket 会继承监听端的非阻塞状态；请求还未写入时不能直接 read。
+                stream.set_nonblocking(false).unwrap();
+                return stream;
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 assert!(Instant::now() < deadline, "local request never arrived");
                 std::thread::sleep(Duration::from_millis(5));

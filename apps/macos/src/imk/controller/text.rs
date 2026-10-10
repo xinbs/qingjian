@@ -28,7 +28,9 @@ impl QingjianInputController {
         let [byte] = text.as_bytes() else {
             // 多字符文本（如输入法联动、粘贴）：先把当前候选（英文模式下是敲的字母）上屏，再交给应用
             if composing {
-                if host::with(|h| h.engine.english_mode()).unwrap_or(false) {
+                if host::with(|h| h.engine.english_mode() || h.engine.is_calculating())
+                    .unwrap_or(false)
+                {
                     self.commit_raw(client);
                 } else {
                     self.commit_highlighted(client);
@@ -60,7 +62,14 @@ impl QingjianInputController {
                 host::with(|h| h.engine.note_passthrough(c));
                 return false;
             }
-            if c == '2' {
+            if c == '2'
+                && host::with(|h| {
+                    let composition = h.engine.composition();
+                    composition.text().ends_with('=')
+                        && composition.cursor() == composition.text().len()
+                })
+                .unwrap_or(false)
+            {
                 return self.commit_raw(client);
             }
             if let Some(offset) = c.to_digit(10).filter(|d| *d > 0)
