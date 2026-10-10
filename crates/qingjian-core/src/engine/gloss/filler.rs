@@ -11,6 +11,14 @@ pub trait GlossFiller: Send {
     /// 请给 `word` 写一条 `language` 的释义。实现自行去重、攒批，问过的不再问。
     fn request(&mut self, language: Language, word: &str);
 
+    /// 为仍在候选窗中的词或句子补译文；实现可优先处理，不必等待上屏词的攒批。
+    fn request_candidate(&mut self, language: Language, text: &str) {
+        self.request(language, text);
+    }
+
+    /// 当前候选已过期，取消候选翻译；上屏词的后台释义请求继续处理。
+    fn cancel_candidate(&mut self) {}
+
     /// 取已到达的释义，没有返回空。
     fn poll(&mut self) -> Vec<FilledGloss>;
 }

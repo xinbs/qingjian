@@ -56,7 +56,7 @@ pub fn could_be_unicode(body: &str) -> bool {
 /// 表达式模式下允许敲进缓冲区的非字母字符：数字与四则运算符号。
 /// 字母（`x` 当乘号）本来就能进缓冲区，不在此列。
 pub fn is_expression_char(c: char) -> bool {
-    c.is_ascii_digit() || matches!(c, '+' | '-' | '*' | '/' | '(' | ')' | '.' | '^')
+    c.is_ascii_digit() || matches!(c, '+' | '-' | '*' | '/' | '%' | '(' | ')' | '.' | '^')
 }
 
 /// 按输入算快捷候选；不是快捷输入时为空。`expression` 是表达式键；`now` 由调用方给，测试可固定时间。
@@ -204,6 +204,8 @@ mod tests {
     fn expression_chars() {
         assert!(is_expression_char('7'));
         assert!(is_expression_char('('));
+        assert!(is_expression_char('%'));
+        assert_eq!(texts("v7%3"), ["1", "7%3=1"]);
         assert!(!is_expression_char('='));
         assert!(!is_expression_char('x'));
     }

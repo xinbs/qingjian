@@ -20,6 +20,10 @@ impl Engine {
     /// 结果的语言与当前学习语言对不上（中途切过语言）就丢。
     pub fn poll_glosses(&mut self) -> usize {
         let filled = self.gloss_filler.poll();
+        // 进入私密输入后到达的后台结果也丢弃，不写入个人释义表。
+        if self.private {
+            return 0;
+        }
         let mut learned = 0;
         for gloss in filled {
             if gloss.translation.language == self.translator.language() {

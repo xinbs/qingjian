@@ -1,11 +1,12 @@
 //! 释义兜底：[`qingjian_core::GlossFiller`] 的网络实现。
 //!
-//! 独立线程、独立通道，与联想互不干扰：把主线程送来的词攒成一小批（等 [`worker::BATCH_WAIT`] 或攒够
-//! [`worker::BATCH_SIZE`]），一次请求让模型给每个词写 1–2 条学习语言的译词（提示词与 `gloss-gen` 同源，
-//! 只要当前学习语言），解析、清洗后逐条回给主线程。问过的词本进程内不再问，失败也不重试（下次上屏再说）。
+//! 已上屏短词攒小批次请求；候选译文独立线程立即请求完整翻译，最新槽替换时取消旧请求。
+//! 成功请求在进程内去重，失败冷却后允许重试；所有通道操作均不阻塞输入。
 
+mod candidate;
 mod cloud_gloss_filler;
 mod prompt;
+mod request_cache;
 mod worker;
 
 pub use cloud_gloss_filler::CloudGlossFiller;

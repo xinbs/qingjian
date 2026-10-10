@@ -1,10 +1,12 @@
-use std::collections::HashSet;
+//! 已上屏短词的释义批次后台线程。
+
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use qingjian_core::{FilledGloss, Language};
 
 use super::prompt;
+use super::request_cache::RequestCache;
 use crate::chat_client::ChatClient;
 use crate::error::PredictError;
 
@@ -28,8 +30,8 @@ pub struct GlossWorker {
     /// 网络客户端。
     client: ChatClient,
 
-    /// 本进程内问过的 (语言, 词)，不再问。
-    asked: HashSet<(Language, String)>,
+    /// 成功去重，失败冷却后重试。
+    cache: RequestCache,
 }
 
 impl GlossWorker {
@@ -42,7 +44,7 @@ impl GlossWorker {
             requests,
             responses,
             client,
-            asked: HashSet::new(),
+            cache: RequestCache::default(),
         }
     }
 
@@ -52,9 +54,7 @@ impl GlossWorker {
             .enable_all()
             .build()?;
         while let Ok(first) = self.requests.recv() {
-            let Some(batch) = self.collect(first) else {
-                return Ok(());
-            };
+            let batch = self.collect(first);
             // 一批里可能混着两种语言（中途切了学习语言）：按语言各发一次
             let mut languages: Vec<Language> = Vec::new();
             for (language, _) in &batch {
@@ -74,8 +74,8 @@ impl GlossWorker {
         Ok(())
     }
 
-    /// 从第一个词起攒一批：等到 [`BATCH_WAIT`] 或攒够 [`BATCH_SIZE`]；问过的跳过。发送端关闭返回 `None`。
-    fn collect(&mut self, first: (Language, String)) -> Option<Vec<(Language, String)>> {
+    /// 从第一个词起攒一批：等到 [`BATCH_WAIT`] 或攒够 [`BATCH_SIZE`]；成功过或仍在失败冷却期的跳过。
+    fn collect(&mut self, first: (Language, String)) -> Vec<(Language, String)> {
         let deadline = Instant::now() + BATCH_WAIT;
         let mut batch = Vec::with_capacity(BATCH_SIZE);
         self.take(&mut batch, first);
@@ -84,19 +84,19 @@ impl GlossWorker {
             match self.requests.recv_timeout(remaining) {
                 Ok(item) => self.take(&mut batch, item),
                 Err(RecvTimeoutError::Timeout) => break,
-                Err(RecvTimeoutError::Disconnected) => return None,
+                Err(RecvTimeoutError::Disconnected) => break,
             }
         }
-        Some(batch)
+        batch
     }
 
     fn take(&mut self, batch: &mut Vec<(Language, String)>, item: (Language, String)) {
-        if self.asked.insert(item.clone()) {
+        if self.cache.allows(item.0, &item.1, Instant::now()) && !batch.contains(&item) {
             batch.push(item);
         }
     }
 
-    fn ask(&self, runtime: &tokio::runtime::Runtime, language: Language, words: Vec<String>) {
+    fn ask(&mut self, runtime: &tokio::runtime::Runtime, language: Language, words: Vec<String>) {
         if words.is_empty() {
             return;
         }
@@ -113,6 +113,15 @@ impl GlossWorker {
                     elapsed_ms = start.elapsed().as_millis(),
                     "释义兜底完成"
                 );
+                let now = Instant::now();
+                for word in &words {
+                    self.cache.record(
+                        language,
+                        word,
+                        filled.iter().any(|gloss| &gloss.word == word),
+                        now,
+                    );
+                }
                 for gloss in filled {
                     // 接收端没了说明 Filler 已经被 drop，线程随后也会退出
                     if self.responses.send(gloss).is_err() {
@@ -121,6 +130,10 @@ impl GlossWorker {
                 }
             }
             Err(error) => {
+                let now = Instant::now();
+                for word in &words {
+                    self.cache.record(language, word, false, now);
+                }
                 tracing::warn!(language = language.code(), asked = words.len(), %error, "释义兜底失败");
             }
         }

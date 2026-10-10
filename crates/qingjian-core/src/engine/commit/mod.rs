@@ -1,7 +1,6 @@
 //! 上屏：译词标注、按候选消耗缓冲区、对齐音节、学习与撤销、自动造词。
 
 use super::alignment::Alignment;
-use super::annotation::AnnotationReport;
 use super::input_log::{InputLogEntry, InputLogger, InputSource};
 use super::learning::Learner;
 use super::query::EnglishTail;
@@ -9,11 +8,10 @@ use super::{
     AUTO_WORD_MAX_CHARS, AUTO_WORD_THRESHOLD, AUTO_WORD_THRESHOLD_SAME_BUFFER,
     EXPLICIT_TRANSITION_WEIGHT, Engine, choice_key, segment_longest_prefix,
 };
-use crate::candidate::{Candidate, CandidateKind, CandidateList, Language};
+use crate::candidate::{Candidate, CandidateKind, Language};
 use crate::correction::typo;
 use crate::{parser, sentence};
 use qingjian_dictionary::Dictionary;
-use std::time::Instant;
 
 mod chain;
 mod last;
@@ -24,39 +22,6 @@ pub use last::LastCommit;
 pub use transition::Transition;
 
 impl Engine {
-    /// 给候选补上译文。与 [`Self::query`] 分开调用，平台层可以先画候选再补画译文。
-    pub fn annotate(&self, list: &mut CandidateList) -> AnnotationReport {
-        let start = Instant::now();
-        let mut hits = 0;
-        for candidate in &mut list.items {
-            let mut text = candidate.text.as_str();
-            let traditional_map = self.traditional_map.borrow();
-            if self.traditional
-                && let Some(simp) = traditional_map.get(text)
-            {
-                text = simp.as_str();
-            }
-            candidate.translation = match candidate.kind {
-                CandidateKind::Custom(_) => None,
-                // 英文候选按敲的大小写显示（Company / COMPANY），释义表键是小写
-                CandidateKind::English => self.english_translator.translate(text).or_else(|| {
-                    self.english_translator
-                        .translate(&text.to_ascii_lowercase())
-                }),
-                _ => self.translator.translate(text).map(|mut translation| {
-                    self.mark_fresh(&mut translation);
-                    translation
-                }),
-            };
-            hits += usize::from(candidate.translation.is_some());
-        }
-        AnnotationReport {
-            total: list.items.len(),
-            hits,
-            elapsed: start.elapsed(),
-        }
-    }
-
     /// 上屏：记入学习，从缓冲区消耗掉该候选对应的拼音，返回要提交给应用的文本。
     ///
     /// 上屏候选的译文而不是候选本身（壳里修饰键 + 数字）：学习、拼音消耗都和选了这个候选一样，
@@ -164,8 +129,12 @@ impl Engine {
             tracing::debug!(typed, intended, "记录敲错");
             self.learner.record_typo(typed, intended);
         }
-        let mut keys =
-            self.composition.scope()[..consumed.min(self.composition.scope().len())].to_owned();
+        let scope = if self.is_calculating() {
+            self.composition.text()
+        } else {
+            self.composition.scope()
+        };
+        let mut keys = scope[..consumed.min(scope.len())].to_owned();
         // 输入日志按实际敲键原样记：辅码态把触发键与码段接在拼音后面（"kaifa;kf"），
         // replay 逐键重喂时不需要任何特殊逻辑
         if let Some(code) = &self.aux_code {
@@ -578,6 +547,11 @@ impl Engine {
 
     /// 整段作用域对应的候选（英文词、云端词、快捷候选）：吃掉全部键，学习键是整段全拼。
     pub(super) fn whole_scope(&self) -> (usize, String) {
+        // 算式的结果覆盖整个缓冲区，光标在中间也不能只上屏前半段。
+        if self.is_calculating() {
+            let keys = self.composition.text();
+            return (keys.len(), keys.to_owned());
+        }
         let keys = self.composition.scope();
         let input = match self.decode(keys) {
             Some(decoded) => choice_key(decoded.pinyin(), decoded.pinyin().len()),

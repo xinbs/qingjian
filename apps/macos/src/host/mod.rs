@@ -18,31 +18,22 @@ mod settings;
 use std::cell::RefCell;
 use std::path::PathBuf;
 
-use objc2::MainThreadMarker;
 use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
 use objc2_foundation::{NSProcessInfo, NSRect, NSString};
-use qingjian_core::{
-    Candidate, CandidateKind, CloudWord, EmojiTable, Engine, Language, NoInputLogger, Prediction,
-};
-use qingjian_dictionary::{Dictionary, WordList};
-use qingjian_learning::{FrequencyLearner, InputLog, UsageStats, VocabularyBook};
-use qingjian_lm::BigramModel;
+use qingjian_core::{Engine, Language, NoInputLogger};
+use qingjian_learning::InputLog;
 use qingjian_platform::extra_dictionaries;
 use qingjian_platform::{
     AppsConfig, DictionariesConfig, KeyCombo, LayoutMode, LocalModelConfig, Modifiers, PreeditMode,
-    ShortcutConfig,
 };
-use qingjian_predict::{ConnectionTest, PredictConfig, PredictError};
-use qingjian_translate::{Glossary, LayeredTranslator, LevelTable, PersonalGlossary};
+use qingjian_predict::{ConnectionTest, PredictConfig};
 
-use crate::app::BundleInfo;
 use crate::app::{Settings, logging, paths};
 use crate::candidates::{CandidateWindow, Preedit};
-use crate::error::HostError;
 use crate::menubar::{InputMenu, ModeIndicator};
 use crate::preferences::{PreferencesWindow, UpdateStatus};
 
-use cloud::{CloudTestMonitor, PredictMonitor};
+use cloud::{CloudTestMonitor, GlossMonitor, PredictMonitor};
 use config::{ConfigWatch, TextReplacement};
 pub use dictionaries::DictionaryInfo;
 pub use init::init;
@@ -153,6 +144,9 @@ pub struct Host {
 
     /// 联想结果轮询定时器。
     pub monitor: PredictMonitor,
+
+    /// 候选停留后的云译文请求与结果轮询。
+    gloss_monitor: GlossMonitor,
 
     /// 进行中的云服务连通性测试（「云服务」页「测试连接」按钮）；没在测为 `None`。
     cloud_test: Option<ConnectionTest>,

@@ -64,6 +64,8 @@ impl QingjianInputController {
         if !marked.is_empty() {
             let candidates = host::with(|h| h.session.layout.local().to_vec()).unwrap_or_default();
             self.request_prediction(client, &candidates);
+        } else {
+            host::with(|h| h.cancel_prediction());
         }
         self.render(client);
     }
@@ -101,7 +103,11 @@ impl QingjianInputController {
     /// 所以分两次借 Host：先拿策略、放开借用去读、再借回来发请求。
     pub(super) fn request_prediction(&self, client: TextClient<'_>, candidates: &[Candidate]) {
         let policy = host::with(|h| {
-            if !h.engine.prediction_enabled() {
+            if !h.engine.prediction_enabled()
+                || h.engine.is_calculating()
+                || h.engine.composition().is_empty()
+            {
+                h.cancel_prediction();
                 return None;
             }
             if secure_input::enabled() {

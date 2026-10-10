@@ -23,7 +23,7 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 ## crates/qingjian-core
 
 模块：`composition`（缓冲区与光标；中文模式下 Shift+字母按小写进 `buffer` 参与匹配、大写记在 `shifted`，`typed_text` 还原后用于原样上屏）/ `parser` / `correction`（拼写纠错：整段一处编辑的候选纠正 + `typo` 音节级敲错变体表，后者进整句词图当带代价的边）/
-`candidate` / `ranking` / `shortcut` / `sentence` / `fuzzy` / `shuangpin`（双拼：七套方案键位表、键 → 全拼解码与消耗换算）/ `zhuyin`（大千注音：键 → 注音符号 → 拼音，`[general] zhuyin` 开关，声调只判音节完整不进查询）/ `emoji` /
+`candidate` / `ranking` / `shortcut` / `calculator` / `sentence` / `fuzzy` / `shuangpin`（双拼：七套方案键位表、键 → 全拼解码与消耗换算）/ `zhuyin`（大千注音：键 → 注音符号 → 拼音，`[general] zhuyin` 开关，声调只判音节完整不进查询）/ `emoji` /
 `english`（英文模式候选）/ `engine`（`query::EnglishTail`：句末英文词并入整句，`woxiangxuehaorust` → 我想学好rust，尾段也像拼音时按分数与拼音读法比）。
 辅码（`engine/aux_code.rs`）：`Engine.aux_code: Option<String>` 是码段（`None` 拼音态，`Some("")` 刚触发或删空停在辅码态——`Engine.aux_keep_empty`，配置 `[general] aux_code_keep_empty` 缺省开），
 不进 `Composition`；`aux_trigger`（配的触发键 + 光标在段尾 + 作用域能完整切分 + 双拼韵母键优先）、`enter_aux`、
@@ -60,6 +60,8 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 
 `Engine::discard_input` / `EngineSession::discard_input` 用于隐私能力变化时无痕清理输入，包括透传缓冲、学习链和暂存词汇曝光；`set_private` 只切换写入开关，保留已输入的组句。
 
+数字开头即时算式由 Core `calculator` / `Engine::calculation_accepts` 分流，`=` 后生成单个 `Shortcut` 结果，整缓冲区消耗，不学词、不请求云联想。求值复用 `shortcut::evaluate`，支持 `%` 取余、右结合乘方（高于一元符号）、128 字节和 32 递归层限制，浮点结果十位小数，绝对值 ≥1e15 或 <1e-10 用科学计数。macOS 中文模式接入，注音数字仍按原方案处理；数字键在等号后恢复选结果，空格 / 回车接受结果。
+
 ## crates/qingjian-translate
 
 `Glossary`，本地 TSV 释义表（词性 + 译文）；`LevelTable`，词汇等级表（`assets/levels/levels-{en,ja}.tsv`，CEFR A1–C2 / JLPT N5–N1，
@@ -92,8 +94,10 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
   前面的本地候选不挪；排布在 Core `CandidateLayout`）和整句补全（preedit 右侧，Tab）；上屏后不联想，本地历史不进请求。
   简拼（半数以上音节是缩写）的请求 `max_items = 0`，只求整句补全（`prediction::mostly_abbreviated`）：按声母凑出来的词大多是生造词，
   拼音校验又按首字母序列匹配放行缩写，拦不住；问字模式的答案不受这条限制。
-- `CloudGlossFiller`：释义兜底（Core `GlossFiller` trait，与 Predictor 分开的线程与通道，攒 1.5 秒 / 8 个词发一次，问过不再问）：
-  随包释义表没有的词库词 / 云端词上屏后入队，结果壳每秒 `Engine::poll_glosses` 经 `Translator::learn` 写进 `qingjian-translate::PersonalGlossary`
+- `CloudGlossFiller`：Core `GlossFiller` trait 的网络实现，与 Predictor 分开。上屏短词仍攒 1.5 秒 / 8 个词，预算 600 tokens；成功去重、失败冷却 10 秒。
+  候选翻译走独立线程与 watch 最新槽，切换输入 / 高亮取消旧 HTTP 等待；排队超过 2 秒丢弃，预算 400 tokens，译文最多 512 字符。
+  候选成功响应缓存 4096 条，命中重放（避免私密或语言切换时 Core 丢弃结果后无法重试）。Core `request_candidate_gloss` 控制类型、私密、学习语言和本地释义资格；
+  `poll_glosses` 经 `Translator::learn` 写进 `qingjian-translate::PersonalGlossary`，`refresh_layout_glosses` 仅更新布局标注、不重排。macOS 高亮稳定 500 ms 请求，每 100 ms 轮询到超时；安全输入不发请求。
   （`user-glossary-<语言>.tsv`，`LayeredTranslator` 个人表优先）；随云联想开关一起开。
 - 问字键（缺省 `u`）开头是问字模式（`PredictionKind::Question`，答案带读音、不校验拼音），`?` 开头要 `ModeKeys::question_mark` 开着才算（配置 `[shortcut] question_mark`，缺省关，壳用 `Engine::takes_question_mark` 决定空缓冲区的 `?` 是入口还是标点）；`PredictionKind::Translate` 是壳里快捷键触发的「翻译选中文字」
   （双向：汉字为主译成学习语言，外文译回中文，`prediction::translation_target`），译文走结果的 `sentence`。

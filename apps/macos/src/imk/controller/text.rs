@@ -135,6 +135,27 @@ impl QingjianInputController {
             host::with(|h| h.engine.note_passthrough(c));
             return false;
         }
+        // 数字开头的本地算式先收字符，数字不会误选候选，运算符不会变成全角标点。
+        if host::with(|h| h.engine.calculation_accepts(c)).unwrap_or(false) {
+            host::with(|h| h.engine.push(c));
+            self.refresh(client);
+            return true;
+        }
+        if composing && host::with(|h| h.engine.is_calculating()).unwrap_or(false) {
+            let has_result = host::with(|h| h.session.candidate(h.session.highlighted).is_some())
+                .unwrap_or(false);
+            if has_result && (c == ' ' || c == '1') {
+                return self.commit_highlighted(client);
+            }
+            if c == ' ' {
+                self.commit_raw(client);
+                host::with(|h| h.engine.note_passthrough(c));
+                return false;
+            }
+            // 字母或普通标点结束算式输入，先保留用户敲的原文，再处理这个字符。
+            self.commit_raw(client);
+            return self.handle_text(text, client);
+        }
         // 表达式模式（v 开头）：数字与运算符进缓冲区，不当选词 / 翻页键
         let expression = composing && host::with(|h| h.engine.expression_mode()).unwrap_or(false);
         // 英文直输段（缓冲区里已有 `-` 这类字符）：可见字符一律追加，空格 / 回车整段原样上屏

@@ -4,7 +4,7 @@
 //! **这里不允许出现排序、词库或翻译逻辑。** 会话状态（候选、高亮、页码）在 [`crate::host::Session`]。
 
 use objc2::rc::{Allocated, Retained};
-use objc2::runtime::{AnyObject, Sel};
+use objc2::runtime::AnyObject;
 use objc2::{DefinedClass, define_class, msg_send, sel};
 use std::cell::Cell;
 
@@ -166,6 +166,7 @@ define_class!(
                     h.window.hide();
                     h.indicator.deactivate();
                     h.watch.stop();
+                    h.cancel_candidate_gloss();
                     h.engine.break_chain();
                     h.engine.flush_learning();
                     h.last_flush = std::time::Instant::now();
@@ -177,6 +178,7 @@ define_class!(
                 host::with(|h| {
                     h.indicator.deactivate();
                     h.watch.stop();
+                    h.cancel_candidate_gloss();
                     h.engine.flush_learning();
                 });
             }
@@ -277,7 +279,9 @@ impl QingjianInputController {
         // 以前在这里被截走后原样还给应用，全角转换就没机会做了。
         // 表达式模式（`v2^3`）里 ⇧+数字打的是 `^ * ( )`，不当快捷键
         let composing = host::with(|h| !h.engine.composition().is_empty()).unwrap_or(false);
-        let expression = composing && host::with(|h| h.engine.expression_mode()).unwrap_or(false);
+        let expression = composing
+            && host::with(|h| h.engine.expression_mode() || h.engine.is_calculating())
+                .unwrap_or(false);
         if composing
             && !expression
             && !pressed.is_empty()

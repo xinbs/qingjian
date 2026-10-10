@@ -1,12 +1,18 @@
 //! 云端：测试连接的起停与轮询，联想的等待 / 取消 / 轮询与结果套用到当前页。
 
+mod gloss;
+mod gloss_monitor;
+mod gloss_ticker;
 mod predict_monitor;
 mod test_monitor;
 
+pub(super) use gloss_monitor::GlossMonitor;
 pub(super) use predict_monitor::PredictMonitor;
 pub(super) use test_monitor::CloudTestMonitor;
 
-use super::*;
+use super::Host;
+use qingjian_core::{Candidate, CandidateKind, CloudWord, Prediction};
+use qingjian_predict::{ConnectionTest, PredictError};
 
 impl Host {
     /// 清空输入日志文件；开着的话重新打开继续记。

@@ -1,7 +1,9 @@
 //! Engine 的测试：共用的样例词库、辅助函数与 mock 在这里，用例按主题分文件。
 
 mod aux_code;
+mod calculation;
 mod cancellation;
+mod candidate_gloss;
 mod cloud;
 mod code;
 mod correction;
@@ -181,7 +183,10 @@ fn cloud(text: &str, syllables: &[&str]) -> CloudWord {
 #[derive(Default)]
 struct MemoryFiller {
     requested: Arc<Mutex<Vec<String>>>,
+
     ready: Arc<Mutex<Vec<FilledGloss>>>,
+
+    cancelled: Arc<Mutex<usize>>,
 }
 
 impl GlossFiller for MemoryFiller {
@@ -192,6 +197,10 @@ impl GlossFiller for MemoryFiller {
 
     fn poll(&mut self) -> Vec<FilledGloss> {
         std::mem::take(&mut *self.ready.lock().unwrap())
+    }
+
+    fn cancel_candidate(&mut self) {
+        *self.cancelled.lock().unwrap() += 1;
     }
 }
 

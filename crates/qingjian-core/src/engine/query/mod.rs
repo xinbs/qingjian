@@ -1,6 +1,22 @@
 //! 候选生成：按输入模式分派查询。各模式的实现在兄弟文件里，共用的候选构造留在这里。
 
-use super::*;
+use super::{
+    ALTERNATE_MIN_SYLLABLES, ENGLISH_MODE_CANDIDATES, ENGLISH_SWITCH_PENALTY, ENGLISH_ZIPF_FLOOR,
+    Engine, Learner, MAX_CANDIDATES, MIN_COMPLETION_LETTERS, MIN_ENGLISH_TAIL_HEAD_LETTERS,
+    MIN_ENGLISH_TAIL_LETTERS, MIN_GENERATED_LETTERS, MIN_PINYIN_LIKE_TAIL_LETTERS, RESCORE_PATHS,
+    SENTENCE_CANDIDATES, Timings, abbreviated_count, choice_key, is_raw, pattern_key,
+    segment_longest_prefix,
+};
+use crate::candidate::{Candidate, CandidateKind, CandidateList};
+use crate::correction::{self, typo};
+use crate::fuzzy::Expanded;
+use crate::parser::{self, ParseError, Segmentation};
+use crate::ranking::{self, Scored};
+use crate::sentence::{self, Conversion};
+use crate::{english, shortcut};
+use qingjian_dictionary::Match;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 mod code;
 mod converting;
@@ -22,7 +38,7 @@ impl Engine {
     /// 解析当前缓冲区并生成排好序的候选。**不带译文**，译文由 [`Self::annotate`] 补。
     ///
     /// 光标停在拼音中间时只按光标前的那段算候选（`ni|hao` 出 你），光标后的拼音留着，
-    /// 上屏之后接着组句；见 [`Composition::scope`]。
+    /// 上屏之后接着组句；见 [`crate::composition::Composition::scope`]。
     pub fn query(&self) -> Result<Query, ParseError> {
         self.last_rescored.set(false);
         let mut query = match self.query_inner() {
@@ -45,6 +61,22 @@ impl Engine {
                 )
             }
         };
+        if self.is_calculating() {
+            // 计算只有结果候选，不插入自定义短语，也不做拼音或神经排序。
+            *self.last_query.borrow_mut() = Some(QuerySnapshot {
+                scope: self.composition.text().to_owned(),
+                pinyin: self.composition.text().to_owned(),
+                corrected: false,
+                candidates: query
+                    .candidates
+                    .items
+                    .iter()
+                    .map(|c| c.text.clone())
+                    .collect(),
+                rescored: false,
+            });
+            return Ok(query);
+        }
         query.aux = self.aux_segment();
         // 辅码态只出命中码的词：自定义短语没有码，不出
         if self.aux_filter().is_none() {
@@ -95,6 +127,9 @@ impl Engine {
         let rest = self.marked_rest(self.composition.rest());
         if self.english_mode {
             return Ok(self.query_english(keys, rest, start));
+        }
+        if self.is_calculating() {
+            return Ok(self.query_calculation(start));
         }
         if self.modes().is_expression(keys, self.zhuyin) {
             return Ok(self.query_expression(keys, rest, start));

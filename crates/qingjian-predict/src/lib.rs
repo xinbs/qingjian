@@ -3,7 +3,7 @@
 //! 请求在独立线程里发，主线程只往通道里丢请求、从通道里取结果，永远不阻塞输入。
 //! 「最新请求优先」：防抖窗口内只发最后一个请求，新输入取消旧请求；Core 仍按序号丢弃过期结果。
 //!
-//! [`CloudGlossFiller`] 是释义兜底（[`qingjian_core::GlossFiller`]）的网络实现，独立线程，攒批问、不丢请求。
+//! [`CloudGlossFiller`] 是释义兜底（[`qingjian_core::GlossFiller`]）的网络实现，短词攒批问，候选整句独立请求、最新候选优先。
 
 mod cache;
 mod chat_client;

@@ -80,6 +80,7 @@ impl Host {
 
     /// 新一轮候选：每页格数取配置与窗口能画的行数中较小者，云端槽位数取配置。
     pub fn reset_session(&mut self, preedit: Option<Preedit>, candidates: Vec<Candidate>) {
+        self.cancel_candidate_gloss();
         self.status = None;
         let page_size = self.page_size.min(self.window.max_rows()).max(1);
         self.session
@@ -88,6 +89,7 @@ impl Host {
 
     /// 按会话状态画候选窗口。候选为空且没有 preedit 时收窗。
     pub fn render(&mut self) {
+        self.schedule_candidate_gloss();
         let size = self.session.layout.page_size();
         let page = self.session.page;
         // 横排展开成矩阵时画视口里的几行，序号只标在高亮所在那一行（数字键选的就是它）；单行时只画当前页

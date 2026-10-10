@@ -21,6 +21,7 @@ impl Host {
     /// 把当前配置推给 Engine 与界面：模糊音 / 模式键 / 翻页 / 外观直接设；学习语言变了换释义表；
     /// `[predict]` 变了（或 `force`）才重建 Predictor；最后刷新云朵标识、菜单勾选与设置窗口。
     pub fn apply_config(&mut self, force: bool) {
+        let previous_language = self.learning_language;
         let config = self.settings.config().clone();
         crate::imk::modifiers::set_english_enabled(config.general.english_mode);
         self.engine.set_fuzzy(config.fuzzy);
@@ -79,7 +80,7 @@ impl Host {
                         self.engine.set_predictor(Box::new(NoPredictor));
                     }
                 }
-                // 释义兜底随云联想一起开：释义表里没有的词上屏后问云端写进个人释义表
+                // 释义兜底随云联想一起开：缺少译文的候选停留或词语上屏后问云端
                 match CloudGlossFiller::new(&config.predict) {
                     Ok(filler) => self.engine.set_gloss_filler(Box::new(filler)),
                     Err(error) => {
@@ -92,6 +93,7 @@ impl Host {
                 self.engine.set_gloss_filler(Box::new(NoGlossFiller));
             }
             self.monitor.stop();
+            self.cancel_candidate_gloss();
             self.sentence = None;
             self.applied_predict = config.predict.clone();
         }
@@ -125,6 +127,13 @@ impl Host {
             &self.update_status,
         );
         self.sync_update();
+        if previous_language != self.learning_language {
+            self.cancel_candidate_gloss();
+            self.engine.refresh_layout_glosses(&mut self.session.layout);
+            if !self.engine.composition().is_empty() {
+                self.render();
+            }
+        }
     }
 
     /// 配置里的自定义短语，`[general] system_text_replacements` 开着时再并上系统的文本替换，一起推给 Engine。
@@ -222,6 +231,12 @@ impl Host {
         let learned = self.engine.poll_glosses();
         if learned > 0 {
             tracing::info!(learned, "释义兜底写入个人释义表");
+            if !self.engine.composition().is_empty()
+                && !crate::imk::secure_input::enabled()
+                && self.engine.refresh_layout_glosses(&mut self.session.layout)
+            {
+                self.render();
+            }
         }
         if self.last_flush.elapsed() >= LEARNING_FLUSH_INTERVAL {
             self.engine.flush_learning();

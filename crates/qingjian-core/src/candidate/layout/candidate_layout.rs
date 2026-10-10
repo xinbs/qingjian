@@ -39,6 +39,11 @@ impl CandidateLayout {
         &self.cloud
     }
 
+    /// 引擎补译文时遍历真实候选，保留格子位置与分页配置。
+    pub(crate) fn candidates_mut(&mut self) -> impl Iterator<Item = &mut Candidate> {
+        self.local.iter_mut().chain(self.cloud.iter_mut())
+    }
+
     /// 第一页最多给云端几格：本地候选至少占第一格；没有本地候选（问字模式）时整页都给云端。
     pub fn capacity(&self) -> usize {
         if self.local.is_empty() {
