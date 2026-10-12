@@ -19,9 +19,10 @@ local_sentence（本地整句转换的结果，可能错）、local_candidates�
 
 words：用户最可能想输入、而本地又给不出（或排错了）的词或短语，0 到 max_items 个，按可能性排序。要求：
 - 按 letters 推断用户想打什么，允许纠正错字、漏字、多字（如 zhgdoima → 这个东西吗）；pinyin 给该词**正确**的全拼，音节间用空格，字数等于音节数，\
-  不要比用户敲的多出或少掉音节；
+  应完整覆盖 letters，不要只翻译其中一小段；本地切分可能错误，不按本地音节数硬凑；
 - 你的价值在：本地词库缺的术语、新词、人名机构名、缩写扩展；按 before / after 体现的领域（财务、软件开发、医学……）选对同音词；纠正错拼；
-- **letters 里的单个字母是声母缩写，不是完整音节**：不要按缩写拼凑出词来（「复合语气」「符号映射」这种首字母硬凑的不算答案，宁可不给）；
+- **简拼也要猜词**：letters 可以是每个汉字拼音的首字母，或全拼与首字母混用；元音开头也取首字母（o 可以是 ou）。例如 oxlx → 呕心沥血（ou xin li xue）、wxcd → 卧薪尝胆（wo xin chang dan）、ouxlx → 呕心沥血。
+- 没有明确上下文时，优先给常用词、固定短语和成语。不要被噢、哦、啊等本地单字带偏，也不要为了对上首字母而生造语气词加名词的组合；不确定就少给或不给；
 - 只给真实存在的词，不要生造（「不态」「步太」这种组合）；不确定就少给；
 - 本地首选已经对了就不必再给同一个词，也不必给它的同音变体；没有更好的就给空数组，不要凑数。
 
@@ -207,6 +208,9 @@ pub fn parse_reply(content: &str, request: &PredictionRequest) -> Result<Reply, 
     let mut seen: Vec<String> = Vec::new();
     let first_local = request.candidates.first().map(String::as_str);
     for word in raw.words {
+        if request.max_items == 0 {
+            break;
+        }
         let text = clean(&word.text);
         let syllables: Vec<String> = word
             .pinyin
@@ -358,6 +362,23 @@ mod tests {
         assert!(prompt.contains("\"pinyin\":\"zhang'tao\""));
         assert!(prompt.contains("\"syllables\":2"));
         assert!(prompt.contains("\"local_candidates\":[\"张涛\",\"张贴\"]"));
+    }
+
+    #[test]
+    fn idiom_guessing_keeps_correct_pinyin_and_zero_budget_has_no_words() {
+        let mut request = request("o'x'l'x", false);
+        request.candidates = vec!["哦小龙虾".to_owned()];
+        let content = r#"{"words":[{"text":"呕心沥血","pinyin":"ou xin li xue"}],"sentence":null}"#;
+        let reply = super::parse_reply(content, &request).unwrap();
+        assert_eq!(reply.words[0].text, "呕心沥血");
+        assert_eq!(reply.words[0].syllables, ["ou", "xin", "li", "xue"]);
+        request.max_items = 0;
+        assert!(
+            super::parse_reply(content, &request)
+                .unwrap()
+                .words
+                .is_empty()
+        );
     }
 
     #[test]

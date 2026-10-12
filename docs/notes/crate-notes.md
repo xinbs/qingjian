@@ -94,8 +94,9 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
   Core 的 `Predictor::cancel` 默认空操作，`request_prediction` 换序号时与 `cancel_prediction` 一并调用；现有本地 Predictor 保持兼容。
   `PredictConfig` 是配置的 `[predict]` 分节。只在组句中联想，一次请求给云端词（容错校验后补进候选第一页末尾 `[predict] slots` 格，缺省 2，不预留不占位，
   前面的本地候选不挪；排布在 Core `CandidateLayout`）和整句补全（preedit 右侧，Tab）；上屏后不联想，本地历史不进请求。
-  简拼（半数以上音节是缩写）的请求 `max_items = 0`，只求整句补全（`prediction::mostly_abbreviated`）：按声母凑出来的词大多是生造词，
-  拼音校验又按首字母序列匹配放行缩写，拦不住；问字模式的答案不受这条限制。
+  简拼也按 `policy.max_items` 请求猜词：提示优先常用词、固定短语与成语，原始字母比本地切分和错误候选更可信；支持元音首字母（`oxlx` → 呕心沥血）和全拼 / 简拼混输。
+  Core 校验字数、合法音节、全拼与用户字母的前缀编辑距离，并核对词库已知汉字的读音；未知字保持兼容。少量错拼仍按既有容错额度放行。
+  回复解析遵守零词预算，接口即使违规返回词也不保留；云端补充不改变本地候选位置。
 - `CloudGlossFiller`：Core `GlossFiller` trait 的网络实现，与 Predictor 分开。上屏短词仍攒 1.5 秒 / 8 个词，预算 600 tokens；成功去重、失败冷却 10 秒。
   候选翻译走独立线程与 watch 最新槽，切换输入 / 高亮取消旧 HTTP 等待；排队超过 2 秒丢弃，预算 400 tokens，译文最多 512 字符。
   候选成功响应缓存 4096 条，命中重放（避免私密或语言切换时 Core 丢弃结果后无法重试）。Core `request_candidate_gloss` 控制类型、私密、学习语言和本地释义资格；
