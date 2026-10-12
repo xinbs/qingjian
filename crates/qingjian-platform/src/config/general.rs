@@ -77,6 +77,9 @@ pub struct GeneralConfig {
     /// 常在中文模式里打英文词的人不受影响；想要中文永远在前的自己打开。
     pub chinese_first: bool,
 
+    /// macOS 候选窗口把英文译文显示在中文前面；只改展示，空格与数字键仍上屏中文。
+    pub english_translation_first: bool,
+
     /// 中文模式下整段是英文词或英文词的开头时给英文候选与补全（`hello`、`compa` → company）。关掉中文模式只出中文，英文模式照旧。
     pub english_in_chinese: bool,
 
@@ -164,6 +167,7 @@ impl Default for GeneralConfig {
             english_candidates: true,
             traditional: false,
             chinese_first: false,
+            english_translation_first: false,
             english_in_chinese: true,
             emoji: true,
             shift_letter: ShiftLetter::default(),
@@ -329,6 +333,16 @@ mod tests {
         assert!(!general.horizontal_grid);
         let general: GeneralConfig = toml::from_str("horizontal_grid = true\n").unwrap();
         assert!(general.horizontal_grid);
+    }
+
+    #[test]
+    fn english_translation_first_is_opt_in_and_round_trips() {
+        let legacy: GeneralConfig = toml::from_str("learning_language = 'en'").unwrap();
+        assert!(!legacy.english_translation_first);
+        let enabled: GeneralConfig = toml::from_str("english_translation_first = true").unwrap();
+        assert!(enabled.english_translation_first);
+        let loaded: GeneralConfig = toml::from_str(&toml::to_string(&enabled).unwrap()).unwrap();
+        assert_eq!(loaded, enabled);
     }
 
     #[test]

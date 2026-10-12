@@ -16,6 +16,13 @@ use qingjian_core::{Candidate, CandidateKind, Cell};
 use qingjian_platform::LayoutMode;
 
 impl Host {
+    /// 展示开关只作用于中文输入中的英文译文，英文模式和其他学习语言照旧。
+    pub fn english_translation_first(&self, candidate: &Candidate) -> bool {
+        self.settings.config().general.english_translation_first
+            && !self.engine.english_mode()
+            && candidate.english_display_translation().is_some()
+    }
+
     /// 删掉当前页第 `offset` 格的候选：用户词整个删、词库词清学习。返回给用户看的一句话；那格没有候选返回 `None`。
     pub fn forget_candidate(&mut self, offset: usize) -> Option<String> {
         let index = self.session.index_on_page(offset)?;
@@ -127,9 +134,13 @@ impl Host {
                         cloud: false,
                     };
                 };
-                let mut row = Row::from_candidate(offset, candidate);
+                let mut row = Row::with_english_first(
+                    offset,
+                    candidate,
+                    self.english_translation_first(candidate),
+                );
                 row.index = index;
-                row.cloud = candidate.kind == CandidateKind::Cloud;
+                row.cloud |= candidate.kind == CandidateKind::Cloud;
                 row
             })
             .collect();

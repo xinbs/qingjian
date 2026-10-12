@@ -130,9 +130,9 @@ impl Host {
         if previous_language != self.learning_language {
             self.cancel_candidate_gloss();
             self.engine.refresh_layout_glosses(&mut self.session.layout);
-            if !self.engine.composition().is_empty() {
-                self.render();
-            }
+        }
+        if !self.engine.composition().is_empty() {
+            self.render();
         }
     }
 

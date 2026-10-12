@@ -128,6 +128,9 @@ pub enum Setting {
     /// `[general] chinese_first`，勾选框：中英混输时中文候选排在英文词前。
     ChineseFirst,
 
+    /// `[general] english_translation_first`，只交换英文译文与中文候选的显示位置。
+    EnglishTranslationFirst,
+
     /// `[general] english_in_chinese`，勾选框：中文模式也给英文词与补全。
     EnglishInChinese,
 
@@ -248,6 +251,7 @@ impl Setting {
             Self::Preedit => 13,
             Self::EnglishCandidates => 14,
             Self::ChineseFirst => 42,
+            Self::EnglishTranslationFirst => 67,
             Self::Emoji => 62,
             Self::EnglishInChinese => 63,
             Self::ShiftLetter => 50,
@@ -325,6 +329,7 @@ impl Setting {
             13 => Self::Preedit,
             14 => Self::EnglishCandidates,
             42 => Self::ChineseFirst,
+            67 => Self::EnglishTranslationFirst,
             62 => Self::Emoji,
             63 => Self::EnglishInChinese,
             50 => Self::ShiftLetter,
@@ -429,6 +434,7 @@ mod tests {
             Setting::Traditional,
             Setting::Emoji,
             Setting::EnglishInChinese,
+            Setting::EnglishTranslationFirst,
             Setting::VerboseLog,
             Setting::OpenLogDirectory,
             Setting::CopyDiagnostics,

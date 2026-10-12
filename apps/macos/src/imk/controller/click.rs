@@ -61,16 +61,80 @@ impl QingjianInputController {
         if !composing {
             return;
         }
-        match target {
-            HitTarget::Candidate(offset) => {
-                if let Some(index) = host::with(|h| h.session.index_in_view(offset)).flatten() {
+        let offset = match target {
+            HitTarget::Candidate(offset) => offset,
+            HitTarget::Translation { candidate, .. } => candidate,
+        };
+        let index = host::with(|h| h.session.index_in_view(offset)).flatten();
+        let english_first = host::with(|h| {
+            index
+                .and_then(|index| h.session.candidate(index))
+                .is_some_and(|candidate| h.english_translation_first(&candidate))
+        })
+        .unwrap_or(false);
+        match displayed_target(target, english_first) {
+            HitTarget::Candidate(_) => {
+                if let Some(index) = index {
                     self.commit_index(index, client);
                 }
             }
-            HitTarget::Translation { candidate, sense } => {
-                let index = host::with(|h| h.session.index_in_view(candidate)).flatten();
+            HitTarget::Translation { sense, .. } => {
                 self.commit_translation_at(index, sense, client);
             }
+        }
+    }
+}
+
+/// 前置显示时，主文本是英文译文，旁注是中文；鼠标语义始终跟随可见文字。
+fn displayed_target(target: HitTarget, english_first: bool) -> HitTarget {
+    if !english_first {
+        return target;
+    }
+    match target {
+        HitTarget::Candidate(candidate) => HitTarget::Translation {
+            candidate,
+            sense: 0,
+        },
+        HitTarget::Translation { candidate, .. } => HitTarget::Candidate(candidate),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::displayed_target;
+    use qingjian_render::HitTarget;
+
+    #[test]
+    fn english_first_clicks_follow_the_visible_language() {
+        assert_eq!(
+            displayed_target(HitTarget::Candidate(2), true),
+            HitTarget::Translation {
+                candidate: 2,
+                sense: 0
+            }
+        );
+        assert_eq!(
+            displayed_target(
+                HitTarget::Translation {
+                    candidate: 2,
+                    sense: 0
+                },
+                true
+            ),
+            HitTarget::Candidate(2)
+        );
+    }
+
+    #[test]
+    fn normal_display_and_missing_translations_keep_click_behavior() {
+        for target in [
+            HitTarget::Candidate(2),
+            HitTarget::Translation {
+                candidate: 2,
+                sense: 1,
+            },
+        ] {
+            assert_eq!(displayed_target(target, false), target);
         }
     }
 }

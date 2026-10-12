@@ -17,6 +17,9 @@ pub struct GeneralPage {
     /// 学习语言。
     learning_language: Retained<NSPopUpButton>,
 
+    /// 英文译文放在中文候选前面显示。
+    english_translation_first: Retained<NSButton>,
+
     /// 每页候选数。
     page_size: Retained<NSPopUpButton>,
 
@@ -88,6 +91,18 @@ impl GeneralPage {
             layout,
             mtm,
             "候选词右侧显示哪种语言的译词，只列出安装了释义表的语言；「不显示译文」同时关掉生词标记与释义兜底。",
+        );
+        let english_translation_first = checkbox(
+            mtm,
+            "英文译文显示在前（空格仍输入中文）",
+            Setting::EnglishTranslationFirst,
+            target,
+        );
+        row_checkbox(layout, &english_translation_first);
+        note(
+            layout,
+            mtm,
+            "学习语言为英语时，英文译文放左侧，中文放右侧；空格和数字键仍输入中文。Option＋数字仍输入英文，鼠标点击哪种文字就输入哪种文字。没有译文时照常显示中文。",
         );
         let page_size_titles: Vec<String> = (1..=MAX_PAGE_SIZE).map(|n| n.to_string()).collect();
         let page_size = row_popup(
@@ -224,6 +239,7 @@ impl GeneralPage {
         );
         Self {
             learning_language,
+            english_translation_first,
             page_size,
             scheme,
             wubi,
@@ -244,6 +260,12 @@ impl GeneralPage {
 
     pub fn sync(&self, config: &Config) {
         let general = &config.general;
+        set_checked(
+            &self.english_translation_first,
+            general.english_translation_first,
+        );
+        self.english_translation_first
+            .setEnabled(general.learning_language == "en");
         select(
             &self.punctuation,
             Some(usize::from(!general.full_width_punctuation)),

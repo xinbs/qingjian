@@ -3,6 +3,7 @@
 //! 翻译是候选词的 annotation：可选、单语言、最多 [`Translation::MAX_SENSES`] 条释义。
 //! 不要把它扩展成多语言并列的结构，那会破坏「一次只学一种语言」的产品原则。
 
+mod display;
 mod furigana;
 mod kind;
 mod language;
