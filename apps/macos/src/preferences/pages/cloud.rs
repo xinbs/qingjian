@@ -76,7 +76,7 @@ impl CloudPage {
         note(
             layout,
             mtm,
-            "云端词到了只补进第一页末尾这几格（比如 2 就是 8、9），前面的本地候选不动；没到就什么都不变，翻页后全是本地候选。",
+            "云猜词从第二位开始显示，本地首选保留，其余本地词顺延；已移到其他候选或翻页时不插入。0 表示只要整句补全。",
         );
         let provider_titles: Vec<String> = CloudProvider::ALL
             .iter()

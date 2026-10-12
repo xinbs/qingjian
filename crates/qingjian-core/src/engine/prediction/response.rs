@@ -1,6 +1,6 @@
 use super::cloud_word::CloudWord;
 
-/// 联想结果。只是候选之外的补充展示，**不重排本地候选**：云端词补进第一页末尾几格。
+/// 联想结果。只是候选之外的补充展示，**不重排本地候选**：云端词从第二格开始补入，本地首选保留。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Prediction {
     /// 对应的请求序号。

@@ -57,7 +57,7 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
         ),
         field(
             "云端词格数",
-            "云端词到了只补进第一页末尾这几格，前面的本地候选不动；没到就什么都不变。0 = 只要整句补全。",
+            "云猜词从第二位开始显示，本地首选保留，其余本地词顺延；已移到其他候选时不插入。0 = 只要整句补全。",
             NumberBox::new()
                 .minimum(0.0)
                 .maximum(9.0)

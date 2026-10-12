@@ -92,8 +92,8 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 - `CloudPredictor`：`Predictor` trait 的网络实现（async-openai，OpenAI 兼容接口，默认 DeepSeek），后台线程防抖 / 缓存 / 超时，`submit` / `cancel` / `poll` 非阻塞。
   `tokio::sync::watch` 只保留最新请求（`None` 表示取消），防抖和 HTTP 请求均与状态变化竞争；输入变化或 Predictor 被替换 / 丢弃时丢掉旧 HTTP future，新请求不再排队等待。
   Core 的 `Predictor::cancel` 默认空操作，`request_prediction` 换序号时与 `cancel_prediction` 一并调用；现有本地 Predictor 保持兼容。
-  `PredictConfig` 是配置的 `[predict]` 分节。只在组句中联想，一次请求给云端词（容错校验后补进候选第一页末尾 `[predict] slots` 格，缺省 2，不预留不占位，
-  前面的本地候选不挪；排布在 Core `CandidateLayout`）和整句补全（preedit 右侧，Tab）；上屏后不联想，本地历史不进请求。
+  `PredictConfig` 是配置的 `[predict]` 分节。只在组句中联想，一次请求给云端词（容错校验后从候选第一页第二格开始补入最多 `[predict] slots` 项，缺省 2，不预留不占位，
+  本地首选保留，其余本地候选顺延；固定短语位置保留，云端词在其后。`CandidateLayout::can_insert_cloud` 保护已移动高亮的选择；排布在 Core `CandidateLayout`）和整句补全（preedit 右侧，Tab）；上屏后不联想，本地历史不进请求。
   简拼也按 `policy.max_items` 请求猜词：提示优先常用词、固定短语与成语，原始字母比本地切分和错误候选更可信；支持元音首字母（`oxlx` → 呕心沥血）和全拼 / 简拼混输。
   Core 校验字数、合法音节、全拼与用户字母的前缀编辑距离，并核对词库已知汉字的读音；未知字保持兼容。少量错拼仍按既有容错额度放行。
   回复解析遵守零词预算，接口即使违规返回词也不保留；云端补充不改变本地候选位置。

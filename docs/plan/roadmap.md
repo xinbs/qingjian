@@ -180,7 +180,7 @@ Core 永远不联网。第一个实现接 DeepSeek（OpenAI 兼容接口），�
 - [x] `Predictor` trait：`submit` / `poll` 非阻塞，请求带序号，Engine 只认最新序号；`NoPredictor` 缺省
 - [x] `qingjian-predict`：`CloudPredictor`，async-openai 走 OpenAI 兼容接口，后台线程防抖 300 ms、缓存 64 条、超时 5 s
 - [x] 云端词：模型给「拼音对应的词 + 全拼」，Core 逐音节校验；词库没有的选中后记成用户词（`user-words.tsv`）
-- [x] 云端词位置（2026-09-05）：到了只补进第一页末尾 `[predict] slots` 格（缺省 2），前面的本地候选一格不挪，不预留不画占位；
+- [x] 云端词位置（2026-10-12）：从第一页第二格开始插入，本地首选保留，其余本地词顺延；固定短语位置保留，晚到结果不移动已高亮的候选。
   Core `CandidateLayout` 出排布，壳 `Session` 只管高亮与页码；偏好设置「云服务」页可选 0–4 格
 - [x] 触发：只在组句中，停键后同一次请求要云端词和整句补全（preedit 右侧，Tab 接受）；上屏后不联想
 - [x] 整句补全进学习（2026-09-05）：Tab 接受的句子按语言模型切词（`sentence::segment_text`）记进个人 n-gram，可随退格退回

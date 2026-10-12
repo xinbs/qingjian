@@ -78,7 +78,9 @@ impl Router {
                 .into_iter()
                 .map(CloudWord::into_candidate)
                 .collect();
-            layout.set_cloud(words);
+            if layout.can_insert_cloud(self.highlight) {
+                layout.set_cloud(words);
+            }
             self.sentence = prediction.sentence;
         }
     }

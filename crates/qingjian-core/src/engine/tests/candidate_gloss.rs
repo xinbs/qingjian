@@ -185,7 +185,7 @@ fn refreshed_glosses_preserve_cell_order_cloud_slots_and_pages() {
     assert_eq!(before, after);
     assert_eq!(
         layout
-            .candidate(2)
+            .candidate(1)
             .unwrap()
             .translation
             .as_ref()

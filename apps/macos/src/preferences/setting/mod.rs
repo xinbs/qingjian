@@ -203,7 +203,7 @@ pub enum Setting {
     /// 「关于」「高级」页「打包日志到桌面」按钮。
     ExportLogs,
 
-    /// `[predict] slots`，弹出菜单 0–4：第一页末尾留给云端词的格数。
+    /// `[predict] slots`，弹出菜单 0–4：从第二位开始最多显示的云端词项数。
     CloudSlots,
 
     /// `[apps] english_candidates_off`，勾选框：勾上写缺省的终端 / 编辑器列表，去掉写空表。

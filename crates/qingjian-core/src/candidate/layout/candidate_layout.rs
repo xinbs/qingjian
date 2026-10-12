@@ -1,7 +1,9 @@
-use super::super::{Candidate, CandidateKind};
-use super::Cell;
+//! 本地候选与云猜词的分页排布；保留首选和自定义短语固定位置。
 
-/// 本地候选 + 云端词的分页排布。索引空间是「格」：第一页先本地后云端，之后各页全是本地候选。
+use super::Cell;
+use crate::candidate::{Candidate, CandidateKind};
+
+/// 本地候选 + 云端词的分页排布。云端词从第二格开始，固定位置短语存在时顺延。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CandidateLayout {
     /// 本地候选，顺序就是 Engine 排好的顺序。
@@ -62,7 +64,26 @@ impl CandidateLayout {
         }
     }
 
-    /// 云端词到了：与本地候选同文的不要（本地已经能给），其余按顺序填进第一页末尾，多出来的丢掉。返回填进去的条数。
+    /// 云端词的插入位置；自定义短语占固定格，云端词放在最后一个固定格之后。
+    pub fn cloud_insertion_index(&self) -> usize {
+        self.local
+            .iter()
+            .filter_map(|candidate| match candidate.kind {
+                CandidateKind::Custom(position) => Some(position),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(1)
+            .max(1)
+            .min(self.local_len())
+    }
+
+    /// 高亮项位于插入点之前时才允许补云端词，避免把用户正在选择的词顶走。
+    pub fn can_insert_cloud(&self, highlighted: usize) -> bool {
+        self.local.is_empty() || highlighted < self.cloud_insertion_index()
+    }
+
+    /// 云端词到了：去重后从第二格开始填入，多出来的丢掉。返回填进去的条数。
     pub fn set_cloud(&mut self, words: Vec<Candidate>) -> usize {
         self.cloud.clear();
         let capacity = self.capacity();
@@ -119,7 +140,7 @@ impl CandidateLayout {
     /// 全部格子按索引顺序排开；空位只属于布局。
     pub fn cells(&self) -> Vec<Cell<'_>> {
         let mut cells = self.local_cells();
-        let first = cells.len().min(self.page_size - self.cloud.len());
+        let first = self.cloud_insertion_index();
         cells.splice(first..first, self.cloud.iter().map(Cell::Cloud));
         cells
     }
@@ -189,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn cloud_words_take_the_end_of_the_first_page_and_only_bump_those_cells() {
+    fn cloud_words_start_second_and_preserve_the_first_local_candidate() {
         let mut layout = CandidateLayout::new(many(12), 9, 3);
         assert_eq!(
             texts(&layout.page(0)),
@@ -199,20 +220,20 @@ mod tests {
         );
         assert_eq!(layout.pages(), 2);
 
-        // 四条云端词只取前三条；前六格不动，原来 7–9 格的本地候选挪到第二页开头
+        // 四条云端词只取前三条；本地首选不动，其余本地候选顺延。
         let filled = layout.set_cloud(vec![cloud("云0"), cloud("云1"), cloud("云2"), cloud("云3")]);
         assert_eq!(filled, 3);
         assert_eq!(
             texts(&layout.page(0)),
             [
-                "本0", "本1", "本2", "本3", "本4", "本5", "☁云0", "☁云1", "☁云2"
+                "本0", "☁云0", "☁云1", "☁云2", "本1", "本2", "本3", "本4", "本5"
             ]
         );
         assert_eq!(
             texts(&layout.page(1)),
             ["本6", "本7", "本8", "本9", "本10", "本11"]
         );
-        assert_eq!(layout.candidate(6).unwrap().text, "云0");
+        assert_eq!(layout.candidate(1).unwrap().text, "云0");
         assert_eq!(layout.candidate(9).unwrap().text, "本6");
     }
 
@@ -220,7 +241,7 @@ mod tests {
     fn duplicates_of_local_candidates_are_dropped_and_fewer_words_take_fewer_cells() {
         let mut layout = CandidateLayout::new(many(4), 9, 2);
         assert_eq!(layout.set_cloud(vec![cloud("本2"), cloud("云0")]), 1);
-        assert_eq!(texts(&layout.page(0)), ["本0", "本1", "本2", "本3", "☁云0"]);
+        assert_eq!(texts(&layout.page(0)), ["本0", "☁云0", "本1", "本2", "本3"]);
         assert_eq!(layout.local()[2].kind, CandidateKind::Chinese);
         assert_eq!(layout.pages(), 1);
     }
@@ -289,5 +310,37 @@ mod tests {
         assert_eq!(layout.set_cloud(vec![cloud("云")]), 0);
         assert_eq!(layout.candidate(8).unwrap().text, "第九");
         assert!(layout.candidate(7).is_none());
+    }
+
+    #[test]
+    fn late_cloud_words_do_not_move_the_highlighted_local_candidate() {
+        let layout = CandidateLayout::new(many(12), 9, 2);
+        assert_eq!(layout.cloud_insertion_index(), 1);
+        assert!(layout.can_insert_cloud(0));
+        for index in [1, 2, 7, 9] {
+            assert!(!layout.can_insert_cloud(index));
+        }
+        let empty = CandidateLayout::new(Vec::new(), 9, 2);
+        assert!(empty.can_insert_cloud(0));
+        assert_eq!(empty.cloud_insertion_index(), 0);
+    }
+
+    #[test]
+    fn number_two_resolves_the_cloud_word_and_commits_the_whole_pinyin() {
+        let mut layout = CandidateLayout::new(many(12), 9, 2);
+        let word = Candidate {
+            text: "呕心沥血".to_owned(),
+            syllables: ["ou", "xin", "li", "xue"].map(String::from).to_vec(),
+            ..cloud("云")
+        };
+        layout.set_cloud(vec![word]);
+        let selected = layout.candidate(1).unwrap();
+        assert_eq!(selected.text, "呕心沥血");
+        assert_eq!(layout.candidate(0).unwrap().text, "本0");
+        let mut engine =
+            crate::Engine::new(qingjian_dictionary::Dictionary::parse("哦\to\t100\n").unwrap());
+        engine.set_input("oxlx");
+        assert_eq!(engine.commit(selected), "呕心沥血");
+        assert!(engine.composition().is_empty());
     }
 }

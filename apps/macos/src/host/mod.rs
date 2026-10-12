@@ -94,7 +94,7 @@ pub struct Host {
     /// 每页候选数（配置 `[general] page_size`，已夹到 1–9）。
     pub page_size: usize,
 
-    /// 候选窗口第一页末尾留给云端词的格数（配置 `[predict] slots`）。
+    /// 候选窗口从第二位开始最多给云端词的格数（配置 `[predict] slots`）。
     pub cloud_slots: usize,
 
     /// 翻页键对（上一页、下一页）。
