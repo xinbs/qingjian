@@ -280,7 +280,8 @@ impl Engine {
 
     /// 是否处在表达式模式（缓冲区以表达式键、缺省 `v` 开头）。此时壳应把数字和运算符也交给 [`Self::push`]，而不是当选词键。
     pub fn expression_mode(&self) -> bool {
-        !self.has_custom_phrase()
+        !self.english_mode
+            && !self.has_custom_phrase()
             && self
                 .modes()
                 .is_expression(self.composition.text(), self.zhuyin)
@@ -299,7 +300,9 @@ impl Engine {
 
     /// 是否处在问字模式（缓冲区以问字键、缺省 `u`，或 `?` 开头）：拼音问题由云端答，十六进制码点本地答。
     pub fn question_mode(&self) -> bool {
-        !self.has_custom_phrase()
+        // 英文词的 u / v / i 不是模式键；显式问号仍可在英文状态发起问字。
+        (!self.english_mode || self.composition.text().starts_with(QUESTION_PREFIX))
+            && !self.has_custom_phrase()
             && self
                 .modes()
                 .is_question(self.composition.text(), self.zhuyin)
@@ -309,7 +312,7 @@ impl Engine {
     /// 此时壳应把数字交给 [`Self::push`] 而不是当选词键。
     pub fn unicode_entry(&self) -> bool {
         let text = self.composition.text();
-        self.modes().is_question(text, self.zhuyin)
+        self.question_mode()
             && shortcut::could_be_unicode(self.modes().question_body(text, self.zhuyin))
     }
 

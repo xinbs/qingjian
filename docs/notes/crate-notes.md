@@ -381,3 +381,9 @@ Unix socket 用共享长度前缀与 Frame（当前公共版本 8，与 `PROTOCO
 Core `Candidate::english_display_translation` 判断展示资格，macOS `Row::with_english_first` 生成显示投影；Session 中仍保留原候选。
 译文在主文字位、原中文在旁注位，候选排序、键盘提交与拼音消耗保持原样；点击目标随展示位置互换。
 缺少译文不交换，云端结果入表后重画自动生效；学习语言切换或配置热加载会刷新当前显示。
+
+### 英文词首字母与模式入口
+
+Core `question_mode` 在英文组词时只接受显式 `?` 入口，`expression_mode` 只在非英文组词生效，`unicode_entry` 复用问字资格。
+macOS Caps Lock 英文候选路径不会再把 `update` 等词首的 u 误判成问字入口并切回拼音；中文模式键和显式问号入口保留。
+回归逐字复现平台组词分派，检查英文模式、原样 marked text 和 `update` 候选及提交。

@@ -10,6 +10,7 @@ mod correction;
 mod custom;
 mod emoji;
 mod english;
+mod english_prefixes;
 mod learning;
 mod lookup;
 mod privacy;
