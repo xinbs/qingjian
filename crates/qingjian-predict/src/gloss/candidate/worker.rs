@@ -100,7 +100,7 @@ impl CandidateWorker {
                         if next.as_ref().is_some_and(|next| request.same_text(next)) {
                             continue;
                         }
-                        // 丢弃当前 future，底层 HTTP 等待随之取消；下一轮只接最新候选。
+                        // 丢弃候选的本地等待；共享入口只发送仍有人等待的查询，已发送的继续占位。
                         pending = next;
                         break;
                     }

@@ -141,6 +141,7 @@ impl Host {
 /// 连通性测试的错误换成给用户看的中文；接口返回的原话保留，方便对着服务商文档查。
 pub(super) fn describe_predict_error(error: &PredictError) -> String {
     match error {
+        PredictError::Shared(error) => describe_predict_error(error),
         PredictError::MissingApiKey(env) => {
             format!("没有 API 密钥。在上面填一个，或设置环境变量 {env}")
         }

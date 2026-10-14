@@ -1,5 +1,6 @@
 //! 聊天客户端的参数、会话头与响应回归测试。
 
+mod coordination;
 mod live;
 mod responses;
 

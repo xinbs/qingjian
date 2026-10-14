@@ -95,7 +95,7 @@ impl Worker {
                 continue;
             }
             let start = Instant::now();
-            // 丢掉网络 future 会关闭旧请求的本地等待，新输入不再排在它后面。
+            // 取消旧输入的本地等待；未发送的查询跳过，已发送的共享任务继续持有并发位。
             let result = tokio::select! {
                 biased;
                 changed = self.requests.changed() => {

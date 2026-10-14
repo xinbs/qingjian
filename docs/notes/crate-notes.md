@@ -90,7 +90,7 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 ## crates/qingjian-predict
 
 - `CloudPredictor`：`Predictor` trait 的网络实现（async-openai，OpenAI 兼容接口，默认 DeepSeek），后台线程防抖 / 缓存 / 超时，`submit` / `cancel` / `poll` 非阻塞。
-  `tokio::sync::watch` 只保留最新请求（`None` 表示取消），防抖和 HTTP 请求均与状态变化竞争；输入变化或 Predictor 被替换 / 丢弃时丢掉旧 HTTP future，新请求不再排队等待。
+  `tokio::sync::watch` 只保留最新请求（`None` 表示取消），防抖和请求等待均与状态变化竞争；输入变化或 Predictor 被替换 / 丢弃时取消旧输入的本地等待，过期结果不回写。
   Core 的 `Predictor::cancel` 默认空操作，`request_prediction` 换序号时与 `cancel_prediction` 一并调用；现有本地 Predictor 保持兼容。
   `PredictConfig` 是配置的 `[predict]` 分节。只在组句中联想，一次请求给云端词（容错校验后从候选第一页第二格开始补入最多 `[predict] slots` 项，缺省 2，不预留不占位，
   本地首选保留，其余本地候选顺延；固定短语位置保留，云端词在其后。`CandidateLayout::can_insert_cloud` 保护已移动高亮的选择；排布在 Core `CandidateLayout`）和整句补全（preedit 右侧，Tab）；上屏后不联想，本地历史不进请求。
@@ -98,12 +98,17 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
   Core 校验字数、合法音节、全拼与用户字母的前缀编辑距离，并核对词库已知汉字的读音；未知字保持兼容。少量错拼仍按既有容错额度放行。
   回复解析遵守零词预算，接口即使违规返回词也不保留；云端补充不改变本地候选位置。
 - `CloudGlossFiller`：Core `GlossFiller` trait 的网络实现，与 Predictor 分开。上屏短词仍攒 1.5 秒 / 8 个词，预算 600 tokens；成功去重、失败冷却 10 秒。
-  候选翻译走独立线程与 watch 最新槽，切换输入 / 高亮取消旧 HTTP 等待；排队超过 2 秒丢弃，预算 400 tokens，译文最多 512 字符。
+  候选翻译走独立线程与 watch 最新槽，切换输入 / 高亮取消旧候选等待；进入 Worker 前排队超过 2 秒丢弃，预算 400 tokens，译文最多 512 字符。
   候选成功响应缓存 4096 条，命中重放（避免私密或语言切换时 Core 丢弃结果后无法重试）。Core `request_candidate_gloss` 控制类型、私密、学习语言和本地释义资格；
   `poll_glosses` 经 `Translator::learn` 写进 `qingjian-translate::PersonalGlossary`，`refresh_layout_glosses` 仅更新布局标注、不重排。macOS 高亮稳定 500 ms 请求，每 100 ms 轮询到超时；安全输入不发请求。
   （`user-glossary-<语言>.tsv`，`LayeredTranslator` 个人表优先）；随云联想开关一起开。
 - 问字键（缺省 `u`）开头是问字模式（`PredictionKind::Question`，答案带读音、不校验拼音），`?` 开头要 `ModeKeys::question_mark` 开着才算（配置 `[shortcut] question_mark`，缺省关，壳用 `Engine::takes_question_mark` 决定空缓冲区的 `?` 是入口还是标点）；`PredictionKind::Translate` 是壳里快捷键触发的「翻译选中文字」
   （双向：汉字为主译成学习语言，外文译回中文，`prediction::translation_target`），译文走结果的 `sentence`。
+- `ChatClient` 的共享请求入口：
+  请求入口按去掉尾斜线的接口地址与完整密钥隔离，在进程内注册弱引用共享 `RequestBroker`（密钥不落盘、不记日志）。猜词、问字、选中文字翻译、候选翻译、上屏释义与探活统一最多一个在途 HTTP 请求。
+  模型、提示词、上下文、输出预算与思考参数组成的实际 JSON 请求完全相同时，复用在途结果；完成后移除记录，仍由各 Worker 的原有业务缓存保存成功结果，失败 / 空结果可以重试。
+  进程级单线程网络执行器持有已发送的任务直到完成或原定超时；取消本地等待不提前释放并发位。无人等待的排队查询在取得并发位后跳过，不发送过期输入；不同内容等待同一并发位。超时仍包含排队时间，未新增时间参数、防抖修改、开始间隔或自动重试。
+  共享失败用 `PredictError::Shared` 保留原错误类型及来源，macOS 测试连接递归展开为原中文说明。云请求开始、在途复用与过期排队丢弃日志不带正文或密钥。
 - `ChatClient` 按 URL 主机适配思考参数：智谱 / Kimi 的 `none` 转成 `thinking.type=disabled`，通义转成 `enable_thinking=false`；
   官方 OpenAI 的 GPT-4 系列不发不支持的 `reasoning_effort`。MiniMax 发 `reasoning_split=true`，不发 `reasoning_effort`；
   `MiniMax-M3` 在 `none` 时转成 `thinking.type=disabled`，只留正文额度（联想 200、探活 32），也是设置页预设模型。

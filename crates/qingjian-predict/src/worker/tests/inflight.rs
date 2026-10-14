@@ -1,4 +1,4 @@
-//! 网络请求在飞时，最新输入、取消和销毁必须立即生效。
+//! 在途查询串行执行；输入状态的取消和销毁不等待网络，过期结果不回写。
 
 use std::net::TcpListener;
 use std::sync::mpsc;
@@ -10,7 +10,7 @@ use crate::config::PredictConfig;
 use crate::worker::Worker;
 
 #[test]
-fn newer_request_does_not_wait_for_stalled_http_response() {
+fn newer_request_waits_for_shared_slot_and_discards_old_result() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let config = PredictConfig {
@@ -41,7 +41,10 @@ fn newer_request_does_not_wait_for_stalled_http_response() {
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(error) => panic!("{error}"),
             }
-            if release_rx.try_recv().is_ok() || std::time::Instant::now() >= deadline {
+            if release_rx.try_recv().is_ok() {
+                respond(old.take().unwrap(), "过期结果");
+            }
+            if std::time::Instant::now() >= deadline {
                 break;
             }
             std::thread::sleep(Duration::from_millis(5));
@@ -62,18 +65,19 @@ fn newer_request_does_not_wait_for_stalled_http_response() {
     requests.send(Some(request(1))).unwrap();
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
     requests.send(Some(request(2))).unwrap();
-    let reply = responses.recv_timeout(Duration::from_secs(1));
+    assert!(responses.recv_timeout(Duration::from_millis(80)).is_err());
     let _ = release_tx.send(());
+    let reply = responses.recv_timeout(Duration::from_secs(1));
     drop(requests);
     server.join().unwrap();
     worker.join().unwrap();
-    let reply = reply.expect("latest input must not wait for the old HTTP request");
+    let reply = reply.expect("latest input must resume after the shared slot is released");
     assert_eq!(reply.sequence, 2);
     assert_eq!(reply.sentence.as_deref(), Some("最新结果"));
 }
 
 #[test]
-fn cancellation_and_drop_close_the_inflight_request_without_waiting() {
+fn cancellation_and_drop_stop_worker_without_waiting_for_started_http() {
     use std::io::Read;
 
     for cancel_first in [true, false] {
@@ -91,7 +95,11 @@ fn cancellation_and_drop_close_the_inflight_request_without_waiting() {
                 .unwrap();
             started_tx.send(()).unwrap();
             let mut byte = [0];
-            assert_eq!(stream.read(&mut byte).unwrap(), 0);
+            // Worker 结束不关闭已发送的共享请求；它继续占位到完成或超时。
+            assert!(
+                matches!(stream.read(&mut byte), Err(error) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut))
+            );
+            respond(stream, "过期结果");
         });
         let (requests, incoming) = tokio::sync::watch::channel(None);
         let (outgoing, responses) = mpsc::channel();
@@ -110,14 +118,13 @@ fn cancellation_and_drop_close_the_inflight_request_without_waiting() {
         started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         if cancel_first {
             requests.send(None).unwrap();
-            server.join().unwrap();
             drop(requests);
         } else {
             drop(requests);
-            server.join().unwrap();
         }
         stopped_rx.recv_timeout(Duration::from_secs(1)).unwrap();
         worker.join().unwrap();
+        server.join().unwrap();
         assert!(responses.try_recv().is_err());
     }
 }

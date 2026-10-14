@@ -1,3 +1,5 @@
+//! 云查询的配置、网络、超时与响应错误；合并查询保留原始错误来源。
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -26,4 +28,8 @@ pub enum PredictError {
 
     #[error("failed to encode request: {0}")]
     Encode(#[from] serde_json::Error),
+
+    /// 合并请求的调用者共享原始错误，保留错误类型与来源。
+    #[error(transparent)]
+    Shared(std::sync::Arc<PredictError>),
 }

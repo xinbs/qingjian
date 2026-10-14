@@ -137,14 +137,16 @@ fn changing_candidate_cancels_old_network_wait_and_cancel_discards_result() {
         .unwrap();
     let mut old = accept(&listener);
     assert!(read_request(&mut old).contains("旧候选"));
-    // 旧接口保持不回复；新候选仍应立即发出，而非等旧接口超时。
+    // 新候选等待同账号并发位；旧结果仍必须丢弃。
     requests
         .send(Some(CandidateRequest::new(Language::English, "最新候选")))
         .unwrap();
+    respond(&mut old, "旧候选");
     let mut latest = accept(&listener);
     assert!(read_request(&mut latest).contains("最新候选"));
     requests.send(None).unwrap();
     drop(requests);
     worker.join().unwrap();
+    respond(&mut latest, "最新候选");
     assert!(responses.try_recv().is_err());
 }

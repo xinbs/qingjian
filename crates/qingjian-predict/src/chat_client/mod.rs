@@ -1,10 +1,11 @@
 //! OpenAI 兼容聊天客户端：服务商参数适配与 JSON 正文校验。
 
+mod broker;
 pub(crate) mod provider;
 
 use provider::Provider;
 
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use async_openai::Client;
@@ -50,11 +51,15 @@ pub struct ChatClient {
 
     /// 服务商的思考参数与预算约定。
     provider: Provider,
+
+    /// 同一接口与密钥的客户端共用并发位及在途请求。
+    broker: Arc<broker::RequestBroker>,
 }
 
 impl ChatClient {
     pub fn new(config: &PredictConfig, api_key: String) -> Self {
         let provider = Provider::for_url(&config.base_url);
+        let broker = broker::shared_broker(&config.base_url, &api_key);
         let openai = OpenAIConfig::new()
             .with_api_base(config.base_url.trim_end_matches('/'))
             .with_api_key(api_key);
@@ -64,6 +69,7 @@ impl ChatClient {
             timeout: Duration::from_millis(config.request_timeout_ms()),
             reasoning_effort: parse_reasoning_effort(&config.reasoning_effort),
             provider,
+            broker,
         }
     }
 
@@ -99,13 +105,18 @@ impl ChatClient {
         let mut body = serde_json::to_value(args.build()?)?;
         self.provider
             .prepare_request(&mut body, self.reasoning_effort.as_ref(), max_tokens);
-        let raw: serde_json::Value =
-            tokio::time::timeout(self.timeout, self.client.chat().create_byot(body))
-                .await
-                .map_err(|_| PredictError::Timeout(self.timeout.as_millis() as u64))??;
-        let content = response_content(&raw, self.provider)?;
-        tracing::debug!(%content, "模型回复");
-        Ok(content)
+        let key = body.to_string();
+        let client = self.client.clone();
+        let provider = self.provider;
+        self.broker
+            .request(key, self.timeout, async move {
+                tracing::info!("云请求开始");
+                let raw: serde_json::Value = client.chat().create_byot(body).await?;
+                let content = response_content(&raw, provider)?;
+                tracing::debug!(%content, "模型回复");
+                Ok(content)
+            })
+            .await
     }
 }
 
